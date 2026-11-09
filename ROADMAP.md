@@ -369,9 +369,9 @@ Update `10-security.md` with the new secret rules in the same change as M1.
 create it the first time someone saves a folder or environment variable, or picks "New environment",
 with the same starter content as `CreateConfig` and trust pinned to the new file's hash (the app
 wrote it). Do not create it just because a folder was opened: an unasked-for file in someone's repo
-shows up in `git status` and gets committed by accident. Decide the name first (open question 3):
-keep `bikasend.json`, or move to `.bika.json`. A rename reads the old name too for a while, and the
-site, README and rules change with it.
+shows up in `git status` and gets committed by accident. The file becomes `.bika.json` (open
+question 3, decided). No migration: nobody uses `bikasend.json` in production yet, so the old name
+is simply dropped. The site, README, rules and threat model change with it.
 
 ### Security
 
@@ -435,9 +435,8 @@ Bikasend stays a small, sharp tool. Say no to these unless the human asks for th
    defaults in `bikasend.json` examples and docs.
 2. **Secrets Manager only, or Parameter Store too?** The design supports both; SSM is planned for
    P2.
-3. **File name:** `bikasend.json` in the repo root (today), `.bika.json` (shorter, hidden), or
-   `.bikasend/config.json` to keep the root clean? Decide before the config file is created
-   automatically (backlog, App experience).
+3. ~~**File name**~~ **Decided (9 Nov 2026):** `.bika.json` in the repo root, replacing
+   `bikasend.json`. No migration, since no one uses the old name in production yet.
 4. **Prompted values across restarts:** keep them memory-only (current design), or offer the OS
    keychain? A keychain needs `security` (macOS), `secret-tool` (Linux) and the Credential Manager
    (Windows): stdlib via `exec`, but three code paths.
