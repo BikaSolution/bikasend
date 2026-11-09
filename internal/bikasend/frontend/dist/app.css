@@ -255,6 +255,15 @@ mark.find.current { background: #f97316; }
 .var-card .vc-ref, .var-card .vc-value { margin-top: 6px; padding: 5px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow-wrap: anywhere; max-height: 140px; overflow: auto; user-select: text; }
 .var-card .vc-value.masked { color: var(--muted); letter-spacing: .1em; user-select: none; }
 .var-card .vc-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.var-card .vc-actions .link { margin-left: auto; }
+.vc-form { margin-top: 6px; }
+.vc-form .vc-field { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.vc-form .vc-field > span:first-child { font-weight: 600; font-size: .92em; }
+.vc-form input[type=text], .vc-form input[type=password], .vc-form select { width: 100%; }
+.vc-form .vc-hint { color: var(--muted); font-size: .88em; }
+.vc-form .vc-check { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.vc-form .vc-error { color: var(--err); margin-top: 6px; overflow-wrap: anywhere; }
+.vc-form .vc-error:empty { display: none; }
 .complete { position: fixed; z-index: 40; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: var(--shadow); max-height: 240px; overflow: auto; min-width: 260px; }
 .complete button { display: flex; width: 100%; gap: 8px; text-align: left; border: 0; border-radius: 0; background: none; padding: 5px 10px; }
 .complete button.active { background: var(--sel); }

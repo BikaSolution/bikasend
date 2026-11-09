@@ -677,6 +677,15 @@ func (s *Service) writeConfig(data []byte, create bool) error {
 	return s.root.Rename(tmp, configName)
 }
 
+func (s *Service) isPrompt(name string) bool {
+	for _, d := range s.definitions() {
+		if v, ok := d.vars[name]; ok {
+			return v.kind() == bikasend.KindPrompt
+		}
+	}
+	return false
+}
+
 // starterConfig fills the local environment's baseUrl from the spec only when it is a loopback URL.
 func (s *Service) starterConfig() configFile {
 	base := "http://localhost:8080"
@@ -693,6 +702,9 @@ func (s *Service) starterConfig() configFile {
 func (s *Service) SetPrompt(name, value string) (bikasend.Workspace, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !namePattern.MatchString(name) || !s.isPrompt(name) {
+		return s.workspace(), fmt.Errorf("%w: {{%s}} is not a variable that asks for its value", bikasend.ErrInvalidVariable, name)
+	}
 	s.prompts[name] = value
 	return s.workspace(), nil
 }

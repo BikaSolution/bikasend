@@ -184,6 +184,11 @@ func TestVariablesAndScopes(t *testing.T) {
 	if _, err := s.SetPrompt("api_key", "local-secret"); err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range []string{"tenant", "nope", "bad name"} {
+		if _, err := s.SetPrompt(name, "x"); !errors.Is(err, bikasend.ErrInvalidVariable) {
+			t.Errorf("SetPrompt(%q) on a variable that does not ask: %v", name, err)
+		}
+	}
 	if v, _ := findVar(s.Workspace(), bikasend.ScopeEnvironment, "api_key"); !v.Resolved || !v.Secret || v.Value != "" {
 		t.Errorf("prompt variable view leaks or is unresolved: %+v", v)
 	}

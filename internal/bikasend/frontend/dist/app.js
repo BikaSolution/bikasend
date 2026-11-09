@@ -136,7 +136,7 @@ function varField({ value, multiline, placeholder, label, tab, onInput, classNam
     checkComplete(input, tab);
     renderChips();
   });
-  input.addEventListener('scroll', () => { hl.scrollTop = input.scrollTop; hl.scrollLeft = input.scrollLeft; hideVarCard(); });
+  input.addEventListener('scroll', () => { hl.scrollTop = input.scrollTop; hl.scrollLeft = input.scrollLeft; if (!varCard.editing) hideVarCard(); });
   input.addEventListener('mousemove', (e) => {
     const hit = varAtPoint(hl, e.clientX, e.clientY);
     if (hit) showVarCardSoon(hit.name, hit.rect, tab);
@@ -813,7 +813,7 @@ function renderChips() {
 // Shows where a {{variable}} comes from. Secrets stay masked until an explicit Reveal click.
 
 const MASK = '••••••••';
-const varCard = { el: null, name: '', anchor: null, showTimer: 0, hideTimer: 0, revealTimer: 0 };
+const varCard = { el: null, name: '', anchor: null, editing: false, showTimer: 0, hideTimer: 0, revealTimer: 0 };
 
 // onCardPath is true between the variable and its card, so moving the mouse across keeps it open.
 function onCardPath(x, y) {
@@ -838,6 +838,7 @@ function varAtPoint(hl, x, y) {
 }
 
 function showVarCardSoon(name, rect, tab) {
+  if (varCard.editing) return;
   clearTimeout(varCard.hideTimer);
   if (varCard.el && varCard.name === name) return;
   clearTimeout(varCard.showTimer);
@@ -845,6 +846,7 @@ function showVarCardSoon(name, rect, tab) {
 }
 
 function hideVarCardSoon() {
+  if (varCard.editing) return;
   clearTimeout(varCard.showTimer);
   clearTimeout(varCard.hideTimer);
   varCard.hideTimer = setTimeout(hideVarCard, 400);
@@ -858,6 +860,7 @@ function hideVarCard() {
   varCard.el = null;
   varCard.name = '';
   varCard.anchor = null;
+  varCard.editing = false;
 }
 
 function showVarCard(name, rect, tab) {
@@ -894,9 +897,8 @@ function showVarCard(name, rect, tab) {
   if (v && (v.kind === 'aws' || v.kind === 'ssm')) {
     actions.push(h('button', { class: 'btn', onclick: () => call('OpenSecretSource', name) }, 'Open in AWS'));
   }
-  if (!fromSpec) {
-    actions.unshift(h('button', { class: 'btn primary', onclick: () => openVariable(name) }, v ? 'Edit' : 'Add'));
-  }
+  const editLabel = fromSpec ? 'Override' : v ? 'Edit' : 'Add';
+  actions.unshift(h('button', { class: 'btn primary', onclick: () => editInCard(name, v, fromSpec ? tab.server : '') }, editLabel));
 
   const el = h('div', { class: 'var-card ' + st, role: 'dialog', 'aria-label': `{{${name}}}` },
     h('div', { class: 'vc-head' }, h('span', { class: 'vc-name mono' }, `{{${name}}}`), st === 'secret' ? h('span', { class: 'badge' }, 'secret') : st === 'missing' ? h('span', { class: 'badge err' }, 'missing') : null),
@@ -908,13 +910,112 @@ function showVarCard(name, rect, tab) {
   varCard.el = el;
   varCard.name = name;
   varCard.anchor = rect;
+  placeVarCard();
+}
 
+function placeVarCard() {
+  const el = varCard.el;
+  const rect = varCard.anchor;
+  if (!el || !rect) return;
   const w = el.offsetWidth;
   const ht = el.offsetHeight;
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8));
   const below = rect.bottom + 4;
   el.style.left = left + 'px';
   el.style.top = (below + ht > window.innerHeight - 8 ? Math.max(8, rect.top - ht - 4) : below) + 'px';
+}
+
+// looksSecret mirrors secretName in core/variables.go; Go stays the authority on what may be saved where.
+function looksSecret(name) {
+  const n = String(name).toLowerCase();
+  if (['url', 'uri', 'host', 'endpoint', 'path'].some((s) => n.endsWith(s))) return false;
+  return ['key', 'token', 'secret', 'password', 'passwd', 'credential', 'auth', 'cookie', 'private'].some((w) => n.includes(w));
+}
+
+// editInCard turns the card into a small form for the variable's value, in its own scope and kind.
+// prefill seeds a new variable, such as the spec server when overriding {{baseUrl}}.
+function editInCard(name, v, prefill) {
+  const el = varCard.el;
+  if (!el) return;
+  varCard.editing = true;
+  clearTimeout(varCard.hideTimer);
+  clearTimeout(varCard.revealTimer);
+  const ws = state.ws;
+  const error = h('div', { class: 'vc-error', role: 'alert' });
+  // new-password stops password managers from offering to save or fill these fields.
+  const input = (props) => h('input', { spellcheck: 'false', autocomplete: props.type === 'password' ? 'new-password' : 'off', ...props });
+  const row = (text, control, hint) => h('label', { class: 'vc-field' }, h('span', {}, text), control, hint ? h('span', { class: 'vc-hint' }, hint) : null);
+  const fields = [];
+  let submit;
+
+  if (v && v.kind === 'prompt') {
+    const val = input({ type: 'password', placeholder: v.ref || 'Value' });
+    fields.push(row('Value for this session', val, 'Kept in memory until you quit.'));
+    submit = () => api().SetPrompt(name, val.value);
+  } else if (v && v.kind === 'secret') {
+    const val = input({ type: 'password', placeholder: 'New value' });
+    fields.push(row('New value', val, 'Kept in memory for this session only.'));
+    submit = () => api().SetVariable(v.scope, name, { kind: 'secret', value: val.value, key: '', label: '' });
+  } else if (v && (v.kind === 'aws' || v.kind === 'ssm' || v.kind === 'env')) {
+    const ref = String(v.ref || '').replace(/^(aws|ssm|env):/, '');
+    const [id, key] = v.kind === 'aws' ? ref.split('#') : [ref, ''];
+    const idIn = input({ type: 'text', value: id || '', placeholder: { aws: 'example-service/api-keys', ssm: '/example/api-key', env: 'EXAMPLE_API_KEY' }[v.kind] });
+    fields.push(row({ aws: 'Secret ID', ssm: 'Parameter', env: 'Environment variable' }[v.kind], idIn));
+    let keyIn = null;
+    if (v.kind === 'aws') { keyIn = input({ type: 'text', value: key || '', placeholder: 'Optional JSON key' }); fields.push(row('JSON key', keyIn)); }
+    submit = () => api().SetVariable(v.scope, name, { kind: v.kind, value: idIn.value.trim(), key: keyIn ? keyIn.value.trim() : '', label: '' });
+  } else if (v) {
+    const val = input({ type: 'text', value: v.value || '' });
+    const where = v.scope === 'session' ? '' : v.scope === 'global' ? 'Saved in your globals.json.' : 'Saved in .bika.json and shared through git.';
+    fields.push(row('Value', val, where));
+    submit = () => api().SetVariable(v.scope, name, { kind: 'text', value: val.value, key: '', label: '' });
+  } else {
+    // A new variable: plain text in a chosen scope, or a secret kept in this session's memory.
+    // The Secret box comes first and starts ticked for secret-looking names, so a pasted key never shows.
+    const val = input({ type: 'text', value: prefill || '', placeholder: 'Value' });
+    const secret = h('input', { type: 'checkbox', checked: looksSecret(name) });
+    const scopes = allowedScopes().filter((sc) => sc !== 'session');
+    const scope = h('select', {}, ['session', ...scopes].map((sc) => h('option', { value: sc, selected: sc === defaultScope() },
+      sc === 'environment' ? 'Environment: ' + (ws.environment || 'local') : SCOPE_LABELS[sc])));
+    const applySecret = () => {
+      val.type = secret.checked ? 'password' : 'text';
+      val.autocomplete = secret.checked ? 'new-password' : 'off';
+      if (secret.checked) scope.value = 'session';
+      scope.disabled = secret.checked;
+    };
+    secret.addEventListener('change', applySecret);
+    applySecret();
+    fields.push(h('label', { class: 'vc-check' }, secret, ' Secret: keep it in memory for this session only'), row('Value', val), row('Save in', scope));
+    submit = () => secret.checked
+      ? api().SetVariable('session', name, { kind: 'secret', value: val.value, key: '', label: '' })
+      : api().SetVariable(scope.value, name, { kind: 'text', value: val.value, key: '', label: '' });
+  }
+
+  const save = async (ev) => {
+    ev.preventDefault();
+    error.textContent = '';
+    try {
+      const next = await submit();
+      const kind = v ? v.kind : '';
+      hideVarCard();
+      applyWS(next);
+      if (kind === 'aws' || kind === 'ssm') loadSecrets(false);
+      toast('Saved {{' + name + '}}');
+    } catch (e) {
+      error.textContent = errText(e);
+      placeVarCard();
+    }
+  };
+  const form = h('form', { class: 'vc-form', onsubmit: save },
+    ...fields, error,
+    h('div', { class: 'vc-actions' },
+      h('button', { class: 'btn primary', type: 'submit' }, 'Save'),
+      h('button', { class: 'btn', type: 'button', onclick: hideVarCard }, 'Cancel'),
+      h('button', { class: 'link', type: 'button', onclick: () => openVariable(name) }, 'More options')));
+  el.replaceChildren(el.firstChild, form);
+  placeVarCard();
+  const first = form.querySelector('input');
+  if (first) { first.focus(); if (first.type === 'text') first.select(); }
 }
 
 // ---------- Rendering: response ----------
@@ -1168,7 +1269,13 @@ function renderDrawer() {
   if (state.editing) body.append(varEditor());
 
   const q = state.varSearch.toLowerCase();
-  const rows = ws.variables.filter((v) => (state.varScope === 'active' ? true : v.scope === state.varScope) && (!q || v.name.toLowerCase().includes(q)));
+  const all = [...ws.variables];
+  const tab = activeTab();
+  // {{baseUrl}} falls back to the spec server; list it so the value in use is visible and overridable.
+  if (tab && tab.server && !activeVars().has('baseUrl')) {
+    all.unshift({ name: 'baseUrl', scope: 'spec', kind: 'text', value: tab.server, secret: false, resolved: true, active: true, ref: '', shadows: '', error: '' });
+  }
+  const rows = all.filter((v) => (state.varScope === 'active' ? true : v.scope === state.varScope) && (!q || v.name.toLowerCase().includes(q)));
   if (!rows.length) {
     body.append(h('p', { class: 'empty' }, q ? 'No variable matches.' : 'No variables yet. Add one, or type {{name}} in a request and click its chip.'));
     return;
@@ -1192,14 +1299,19 @@ function varRow(v) {
   if (v.kind === 'prompt') {
     actions.append(h('button', { class: 'icon-btn', title: 'Enter this session\'s value', 'aria-label': 'Set ' + v.name, onclick: () => promptsDialog([v.name]) }, '⌨'));
   }
-  if (v.scope !== 'spec') {
+  if (v.scope === 'spec') {
+    actions.append(h('button', { class: 'btn', title: 'Save your own value instead of the spec server', onclick: () => {
+      state.editing = { name: v.name, scope: defaultScope(), kind: 'text', value: v.value, key: '', label: '', isNew: true };
+      renderDrawer();
+    } }, 'Override'));
+  } else {
     actions.append(h('button', { class: 'icon-btn', title: 'Edit', 'aria-label': 'Edit ' + v.name, onclick: () => editVariable(v) }, '✎'),
       h('button', { class: 'icon-btn', title: 'Delete', 'aria-label': 'Delete ' + v.name, onclick: () => deleteVariable(v) }, '✕'));
   }
   return h('tr', { class: v.active ? '' : 'inactive' },
     h('td', {}, h('div', { class: 'name' }, v.secret ? '🔒 ' : '', v.name), v.shadows ? h('div', { class: 'muted small' }, 'overridden by ' + SCOPE_LABELS[v.shadows]) : null),
     h('td', { class: 'value' }, value, err),
-    h('td', {}, h('div', {}, v.scope === 'environment' ? 'Env: ' + state.ws.environment : SCOPE_LABELS[v.scope]), h('div', { class: 'muted small' }, KIND_LABELS[v.kind] || v.kind)),
+    h('td', {}, h('div', {}, v.scope === 'environment' ? 'Env: ' + state.ws.environment : v.scope === 'spec' ? 'Spec server' : SCOPE_LABELS[v.scope]), h('div', { class: 'muted small' }, v.scope === 'spec' ? 'Used when no variable sets it' : KIND_LABELS[v.kind] || v.kind)),
     actions);
 }
 
@@ -1346,7 +1458,7 @@ function trustDialog() {
 function promptsDialog(names) {
   const list = Array.isArray(names) ? names : state.ws.prompts;
   const labels = new Map(state.ws.variables.filter((v) => v.kind === 'prompt').map((v) => [v.name, v.ref || v.name]));
-  const inputs = list.map((n) => h('input', { type: 'password', autocomplete: 'off', 'aria-label': n }));
+  const inputs = list.map((n) => h('input', { type: 'password', autocomplete: 'new-password', 'aria-label': n }));
   openDialog((close) => h('form', {
     onsubmit: async (e) => {
       e.preventDefault();
@@ -1542,8 +1654,9 @@ function wire() {
     else if (e.key === 'Escape' && varCard.el) hideVarCard();
     else if (e.key === 'Escape' && $('drawer').classList.contains('open') && !$('dialog').open) closeDrawer();
   });
-  window.addEventListener('scroll', (e) => { if (!varCard.el || !varCard.el.contains(e.target)) hideVarCard(); }, true);
-  window.addEventListener('blur', hideVarCard);
+  window.addEventListener('scroll', (e) => { if (varCard.el && !varCard.editing && !varCard.el.contains(e.target)) hideVarCard(); }, true);
+  window.addEventListener('blur', () => { if (!varCard.editing) hideVarCard(); });
+  document.addEventListener('mousedown', (e) => { if (varCard.el && varCard.editing && !varCard.el.contains(e.target)) hideVarCard(); });
   if (window.runtime && window.runtime.EventsOn) {
     window.runtime.EventsOn('workspace:changed', () => {
       if (state.ws && state.ws.root) {
