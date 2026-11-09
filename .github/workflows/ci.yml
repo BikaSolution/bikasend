@@ -54,3 +54,21 @@ jobs:
 
       - name: Insecure code patterns
         run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -quiet -tags webkit2_41 ./...
+
+  # Windows behaves differently (file locks, paths); release builds would otherwise be the first to find out.
+  test-windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...

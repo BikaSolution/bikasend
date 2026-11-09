@@ -191,7 +191,8 @@ The site limits each client, caps concurrent requests, times out slow clients an
 GitHub is down. Cloudflare stops floods before they reach the tunnel. Set these in its dashboard:
 
 - **SSL/TLS:** Full mode, Always Use HTTPS, HSTS, minimum TLS 1.2.
-- **Security:** Bot Fight Mode on, the free managed WAF ruleset on.
+- **Security:** the free managed WAF ruleset on. Leave Bot Fight Mode off: it challenges the app's
+  update check and feed readers, and the free plan cannot exempt a path from it.
 - **WAF custom rule:** block every method except `GET` and `HEAD`.
 - **Rate limiting rule:** `/downloads/` at about 20 requests per 10 seconds per IP, block for 10 seconds.
 - **Tunnel:** one public hostname to `http://site:8091`, and a catch-all rule that returns 404.

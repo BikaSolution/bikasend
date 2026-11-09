@@ -105,6 +105,14 @@ func newTestService(t *testing.T, base, config string, aws *fakeAWS) (*Service, 
 	if _, err := s.Open(root); err != nil {
 		t.Fatal(err)
 	}
+	// Windows cannot delete a folder with an open handle; close it before TempDir cleanup.
+	t.Cleanup(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.root != nil {
+			_ = s.root.Close()
+		}
+	})
 	return s, root
 }
 
