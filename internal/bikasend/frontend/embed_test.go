@@ -189,7 +189,8 @@ type cdpReply struct {
 // startChrome runs headless Chrome with a fresh profile and its background networking off.
 func startChrome(t *testing.T, chrome string) *devtools {
 	t.Helper()
-	profile, err := os.MkdirTemp("", "bikasend-chrome-")
+	// Chrome's helper processes outlive Kill and keep writing; t.TempDir would then fail the test.
+	profile, err := os.MkdirTemp("", "bikasend-chrome-") //nolint:usetesting // see above
 	if err != nil {
 		t.Fatal(err)
 	}
