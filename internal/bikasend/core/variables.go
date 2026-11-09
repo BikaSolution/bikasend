@@ -19,6 +19,7 @@ const (
 	configName = ".bika.json"
 	maxConfig  = 1 << 20
 	maskText   = "••••••"
+	maxHosts   = 50
 )
 
 var (

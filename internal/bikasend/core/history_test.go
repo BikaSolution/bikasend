@@ -2,8 +2,15 @@ package core
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -58,5 +65,81 @@ func TestCheckUpdate(t *testing.T) {
 		if newer(a[0], a[1]) != b {
 			t.Errorf("newer(%s, %s) = %v", a[0], a[1], !b)
 		}
+	}
+}
+
+func TestDownloadUpdate(t *testing.T) {
+	payload := []byte("pretend zip")
+	sum := sha256.Sum256(payload)
+	good := hex.EncodeToString(sum[:])
+	plat := platformNames[runtime.GOOS]
+	name := "Bikasend-v9.9.9-test.zip"
+
+	away := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(payload) }))
+	defer away.Close()
+	var entry string
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/latest.json":
+			_, _ = fmt.Fprintf(w, `{"tag":"v9.9.9","downloads":[%s]}`, entry)
+		case r.URL.Path == "/downloads/away":
+			// localhost is another host name than the site's 127.0.0.1.
+			http.Redirect(w, r, strings.Replace(away.URL, "127.0.0.1", "localhost", 1), http.StatusFound)
+		case strings.HasPrefix(r.URL.Path, "/downloads/"):
+			http.Redirect(w, r, "/blob", http.StatusFound)
+		case r.URL.Path == "/blob":
+			_, _ = w.Write(payload)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer site.Close()
+	dl := func(platform, file, sha, u string) string {
+		return fmt.Sprintf(`{"platform":%q,"name":%q,"sha256":%q,"url":%q}`, platform, file, sha, u)
+	}
+
+	s, _ := newTestService(t, "", "", nil)
+	s.opts.UpdateURL = site.URL
+	dir := t.TempDir()
+	s.opts.DownloadDir = dir
+
+	entry = dl(plat, name, good, "/downloads/v9.9.9/"+name)
+	for _, want := range []string{name, "Bikasend-v9.9.9-test-1.zip"} {
+		path, err := s.DownloadUpdate(context.Background())
+		if err != nil || path != filepath.Join(dir, want) {
+			t.Fatalf("download = %q, %v; want %s", path, err, want)
+		}
+		if data, _ := os.ReadFile(path); string(data) != string(payload) {
+			t.Errorf("%s holds %q", want, data)
+		}
+	}
+
+	tests := []struct {
+		name, entry string
+		max         int64
+	}{
+		{name: "SHA-256 mismatch", entry: dl(plat, name, strings.Repeat("0", 64), "/downloads/v9.9.9/"+name)},
+		{name: "a path in the file name", entry: dl(plat, "../Bikasend-v9.9.9-test.zip", good, "/downloads/x")},
+		{name: "an absolute URL", entry: dl(plat, name, good, "https://evil.example/"+name)},
+		{name: "a redirect to another host", entry: dl(plat, name, good, "/downloads/away")},
+		{name: "no build for this platform", entry: dl("Plan 9", name, good, "/downloads/v9.9.9/"+name)},
+		{name: "larger than the cap", entry: dl(plat, name, good, "/downloads/v9.9.9/"+name), max: 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			empty := t.TempDir()
+			s.opts.DownloadDir = empty
+			entry = tt.entry
+			if tt.max > 0 {
+				defer func(old int64) { maxUpdate = old }(maxUpdate)
+				maxUpdate = tt.max
+			}
+			if path, err := s.DownloadUpdate(context.Background()); !errors.Is(err, bikasend.ErrUpdate) {
+				t.Errorf("want ErrUpdate, got %q, %v", path, err)
+			}
+			if left, _ := os.ReadDir(empty); len(left) != 0 {
+				t.Errorf("a failed download left %d files", len(left))
+			}
+		})
 	}
 }

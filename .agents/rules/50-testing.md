@@ -14,6 +14,11 @@
   `fakeAWS` in `core/service_test.go`). No mock frameworks.
 - A wrapper around an external CLI is tested with the helper-process pattern: the test binary
   plays the CLI (see `pkg/awscli/client_test.go`).
+- The UI has one end-to-end test, `TestUI` in `frontend/embed_test.go`. It serves `dist/` with a
+  stand-in for the Wails bridge that calls the real `core.Service`, and drives headless Chrome
+  through a small stdlib DevTools client. No browser automation modules, no browser downloads. It
+  skips without Chrome (`BIKASEND_CHROME` sets the path); CI's Ubuntu runner has one. Extend it
+  when a UI flow changes.
 - Parsers of untrusted input have a fuzz test with seeds inline (`FuzzParseJSON`, `FuzzParseYAML`).
   Run `make fuzz` after changing them; CI runs each for 30s. Never fuzz with default parallelism
   (one worker per CPU); use `make fuzz` or its `-parallel 2` and memory caps.

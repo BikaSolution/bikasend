@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -416,4 +417,64 @@ func TestConfigCreateRespectsNewFileAndLocalBase(t *testing.T) {
 	if base := *s.starterConfig().Environments["local"].Variables["baseUrl"].Text; base != "http://localhost:8080" {
 		t.Errorf("a non-loopback spec server must not become the local baseUrl: %q", base)
 	}
+}
+
+func TestEnvironmentsAndHosts(t *testing.T) {
+	s, root := newTestService(t, "", "", nil)
+
+	w, err := s.CreateEnvironment("staging")
+	if err != nil || !w.Trusted || w.Environment != "staging" || len(w.Environments) != 2 {
+		t.Fatalf("first environment creates the file with local and staging: %+v, %v", w, err)
+	}
+	for _, name := range []string{"staging", "bad name", ""} {
+		if _, err := s.CreateEnvironment(name); !errors.Is(err, bikasend.ErrInvalidConfig) {
+			t.Errorf("CreateEnvironment(%q) = %v, want ErrInvalidConfig", name, err)
+		}
+	}
+
+	if _, err := s.SetHosts([]string{"API.Example.com ", "*.example.com", "api.example.com", "localhost:8080", ""}); err != nil {
+		t.Fatal(err)
+	}
+	env := envView(s.Workspace(), "staging")
+	if !reflect.DeepEqual(env.Hosts, []string{"api.example.com", "*.example.com", "localhost:8080"}) {
+		t.Errorf("hosts = %v", env.Hosts)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, configName)); !strings.Contains(string(data), `"*.example.com"`) {
+		t.Errorf("hosts not saved:\n%s", data)
+	}
+	for _, bad := range [][]string{{"https://api.example.com"}, {"api.example.com/path"}, {"a b"}, make([]string, 0)} {
+		if len(bad) == 0 {
+			for i := range maxHosts + 1 {
+				bad = append(bad, fmt.Sprintf("h%d.example.com", i))
+			}
+		}
+		if _, err := s.SetHosts(bad); !errors.Is(err, bikasend.ErrInvalidConfig) {
+			t.Errorf("SetHosts(%d hosts, first %q) = %v, want ErrInvalidConfig", len(bad), bad[0], err)
+		}
+	}
+
+	// The guard uses the new list: a secret may go to a listed host only.
+	if _, err := s.SetVariable(bikasend.ScopeSession, "token", bikasend.VariableInput{Kind: bikasend.KindSecret, Value: "abcdef"}); err != nil {
+		t.Fatal(err)
+	}
+	req := bikasend.Request{Method: "GET", URL: "https://other.example.org/x", Headers: "Authorization: Bearer {{token}}"}
+	if p := s.Preview(req); p.BlockedBy != "hosts" {
+		t.Errorf("a host outside the list: blockedBy = %q", p.BlockedBy)
+	}
+
+	if w, err := s.DeleteEnvironment("staging"); err != nil || w.Environment != "local" || len(w.Environments) != 1 {
+		t.Errorf("delete the current environment switches to local: %+v, %v", w, err)
+	}
+	if _, err := s.DeleteEnvironment("staging"); !errors.Is(err, bikasend.ErrUnknownEnv) {
+		t.Errorf("deleting twice: %v", err)
+	}
+}
+
+func envView(w bikasend.Workspace, name string) bikasend.EnvironmentView {
+	for _, e := range w.Environments {
+		if e.Name == name {
+			return e
+		}
+	}
+	return bikasend.EnvironmentView{}
 }

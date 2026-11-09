@@ -44,7 +44,8 @@ don't use.
   it comes from, reveal a secret with a click, or open it in the AWS console.
 - **Environments and shared variables.** A committed `.bika.json` holds environments (local,
   staging…) and variable definitions for the whole team; Bikasend creates it the first time you
-  save a shared variable. Your own `globals.json` holds personal ones.
+  save a shared variable. Create and delete environments and edit their hosts in the variables
+  panel. Your own `globals.json` holds personal ones.
 - **AWS secrets, loaded into memory.** Reference AWS Secrets Manager or Parameter Store values.
   Bikasend loads them through your own `aws` CLI and SSO login. Nothing secret is ever committed.
 - **Auth helpers.** OAuth2 client credentials and AWS SigV4 signing per environment.
@@ -52,6 +53,8 @@ don't use.
   a check against the spec's response schema.
 - **History, tabs, command palette (`⌘K`), cURL import and export** (secrets become `$ENV`
   references).
+- **Updates you can trust.** When a new version is out, Bikasend downloads it for your platform and
+  checks its SHA-256 against the release before it saves the file.
 - **Secrets stay in memory.** Never written to disk, logs or the web view. Blocked from hosts an
   environment doesn't list unless you confirm the host, from plain http, and from redirects to
   another host or to plain http.
@@ -101,8 +104,9 @@ AWS login (`aws sso login`, which Bikasend can start for you). Values are: a pla
 `followRedirects`, `tls` (CA and client certificate files in the repo), `oauth2` and `sigv4`.
 
 Bikasend ignores a folder's `.bika.json` until you trust it, and asks again whenever it changes.
-Secrets are only sent to the hosts the environment lists. Any other host needs your confirmation on
-each send (loopback is exempt), and `oauth2` needs a `hosts` list. Press `⌘E` to edit variables.
+Secrets are only sent to the hosts the environment lists. With no list, any other host needs your
+confirmation (loopback is exempt): send once, or "Always allow" to add it to the environment's
+hosts. `oauth2` needs a `hosts` list. Press `⌘E` to edit variables, environments and hosts.
 
 ## Download
 

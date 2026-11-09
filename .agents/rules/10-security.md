@@ -39,6 +39,12 @@ that crosses a boundary updates it in the same PR.
   URL, which needs one); with no list, only loopback or a host the user confirms on that send; no
   secret over plain http without a confirmation; no redirect with a secret to another host or from
   https to http; loaded secrets are masked and redacted raw and URL-escaped. Do not weaken any of them.
+- **The update download trusts nothing it reads.** `DownloadUpdate` fetches only from the update
+  site baked into the build, follows redirects only to that site and GitHub hosts, checks the file
+  name and SHA-256 from `latest.json`, caps the size and never overwrites a file. It never runs or
+  opens the download.
+- **Hosts lists change only on an explicit click** ("Always allow", "Add to hosts", the editor),
+  and never weaken a list: a host outside a non-empty list is refused, not confirmed per send.
 - **Uploads come from the file dialog only.** A spec, cURL import or history entry never chooses a
   local file. `addFile` accepts only paths recorded by `PickFile` in this session.
 - **The aws CLI is called without a shell.** Every ID, profile and region matches a pattern that

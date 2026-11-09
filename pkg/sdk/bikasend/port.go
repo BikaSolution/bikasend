@@ -10,6 +10,10 @@ type Service interface {
 	Workspace() Workspace
 	TrustFolder() (Workspace, error)
 	SelectEnvironment(name string) (Workspace, error)
+	CreateEnvironment(name string) (Workspace, error)
+	DeleteEnvironment(name string) (Workspace, error)
+	// SetHosts replaces the current environment's hosts: the only hosts that may receive secrets.
+	SetHosts(hosts []string) (Workspace, error)
 
 	SetVariable(scope, name string, in VariableInput) (Workspace, error)
 	DeleteVariable(scope, name string) (Workspace, error)
@@ -37,4 +41,6 @@ type Service interface {
 	Curl(r Request) (string, error)
 	ImportCurl(cmd string) (Request, error)
 	CheckUpdate(ctx context.Context) (Update, error)
+	// DownloadUpdate saves this platform's newest build after checking its SHA-256; it returns the path.
+	DownloadUpdate(ctx context.Context) (string, error)
 }

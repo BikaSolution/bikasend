@@ -344,11 +344,31 @@ async function send(tab) {
   }
   const req = wireRequest(tab);
   let preview = await api().Preview(req);
-  if (preview.blockedBy === 'unlisted') {
+  if (preview.blockedBy === 'unlisted' || preview.blockedBy === 'hosts') {
     const host = urlHost(preview.url);
-    const ok = await confirmDialog('Send a secret to an unlisted host?', `No environment lists ${host} in its hosts, and the URL can come from the spec file. Send your secret only if you trust ${host}.`, 'Send anyway', true);
-    if (!ok) return;
-    req.allowHost = host;
+    const ws = state.ws;
+    const cur = (ws.environments || []).find((e) => e.name === ws.environment);
+    // A shared host list lives in .bika.json; with no file yet, saving one creates it with a local environment.
+    const canSave = (ws.trusted && cur) || (ws.root && !ws.configFile);
+    const envName = cur ? cur.name : 'local';
+    const choices = [];
+    let text;
+    if (preview.blockedBy === 'hosts') {
+      text = `Environment "${envName}" sends secrets only to its listed hosts, and ${host} is not one of them. The URL can come from the spec file.`;
+      if (canSave) choices.push({ key: 'save', label: `Add to ${envName}'s hosts and send`, cls: 'primary' });
+    } else {
+      text = `No environment lists ${host} in its hosts, and the URL can come from the spec file. Send your secret only if you trust ${host}.`;
+      choices.push({ key: 'once', label: 'Send once', cls: 'danger' });
+      if (canSave) choices.push({ key: 'save', label: `Always allow for ${envName}`, cls: 'primary' });
+    }
+    const pick = await choiceDialog(`Send a secret to ${host}?`, text, choices);
+    if (!pick) return;
+    if (pick === 'save') {
+      applyWS(await call('SetHosts', [...((cur && cur.hosts) || []), host]));
+      toast(`${host} added to ${envName}'s hosts`);
+    } else {
+      req.allowHost = host;
+    }
     preview = await api().Preview(req);
   }
   if (preview.blockedBy === 'insecure') {
@@ -440,14 +460,36 @@ function renderTop() {
   document.documentElement.style.setProperty('--fs', ((ws && ws.settings.fontSize) || 13) + 'px');
 }
 
+async function downloadUpdate() {
+  const up = state.update;
+  up.busy = true;
+  up.error = '';
+  renderBanners();
+  try {
+    up.saved = await api().DownloadUpdate();
+  } catch (e) {
+    up.error = errText(e);
+  }
+  up.busy = false;
+  renderBanners();
+}
+
 function renderBanners() {
   const ws = state.ws;
   const out = [];
   if (state.update && state.update.available) {
-    out.push(h('div', { class: 'banner' },
-      h('span', { class: 'grow' }, `Bikasend ${state.update.latest} is available (you have ${state.update.current}).`),
-      h('button', { class: 'btn primary', onclick: () => call('OpenURL', state.update.url) }, 'Download'),
-      h('button', { class: 'link', onclick: () => { state.update = null; renderBanners(); } }, 'Later')));
+    const up = state.update;
+    const page = h('button', { class: 'link', onclick: () => call('OpenURL', up.url) }, 'Download page');
+    const later = h('button', { class: 'link', onclick: () => { state.update = null; renderBanners(); } }, up.saved ? 'Close' : 'Later');
+    let text = `Bikasend ${up.latest} is available (you have ${up.current}).`;
+    let action = h('button', { class: 'btn primary', disabled: !!up.busy, onclick: downloadUpdate }, up.busy ? 'Downloading…' : 'Download and verify');
+    if (up.saved) {
+      text = `Saved ${up.saved}. Its SHA-256 matches the release. Unzip it and replace the app you are running.`;
+      action = null;
+    } else if (up.error) {
+      text = `The download failed: ${up.error}`;
+    }
+    out.push(h('div', { class: 'banner' + (up.error ? ' warn' : '') }, h('span', { class: 'grow' }, text), action, page, later));
   }
   if (ws && ws.configFile && !ws.trusted && !ws.configError) {
     out.push(h('div', { class: 'banner warn' },
@@ -1258,6 +1300,8 @@ function renderDrawer() {
     body.append(h('div', { class: 'notice warn' }, 'Folder and environment variables are off until you trust this folder\'s .bika.json. ', h('button', { class: 'link', onclick: trustDialog }, 'Review and trust')));
   }
 
+  const envs = envPanel();
+  if (envs) body.append(envs);
   if (needsAWS()) body.append(awsPanel());
 
   const scopes = [['active', 'In use'], ...allowedScopes().map((s) => [s, s === 'environment' ? 'Env: ' + (ws.environment || 'local') : SCOPE_LABELS[s]])];
@@ -1380,6 +1424,64 @@ function varEditor() {
       h('button', { class: 'btn', type: 'button', onclick: () => { state.editing = null; renderDrawer(); } }, 'Cancel')));
 }
 
+// envPanel picks, creates and deletes environments and edits the current one's hosts.
+function envPanel() {
+  const ws = state.ws;
+  if (!ws.root || (ws.configFile && !ws.trusted) || ws.configError) return null;
+  const envs = ws.environments || [];
+  const cur = envs.find((e) => e.name === ws.environment);
+  const head = h('div', { class: 'row-actions' }, h('strong', {}, 'Environment'));
+  if (envs.length) {
+    head.append(h('select', { 'aria-label': 'Environment', onchange: async (e) => applyWS(await call('SelectEnvironment', e.target.value)) },
+      envs.map((e) => h('option', { value: e.name, selected: e.name === ws.environment }, e.name))));
+  } else {
+    head.append(h('span', { class: 'muted' }, 'None yet'));
+  }
+  head.append(h('button', { class: 'btn', onclick: newEnvironmentDialog }, '+ New'));
+  if (cur) {
+    head.append(h('button', { class: 'btn danger', onclick: async () => {
+      if (await confirmDialog(`Delete ${cur.name}?`, `Its variables and hosts are removed from .bika.json for everyone who pulls the change.`, 'Delete', true)) {
+        applyWS(await call('DeleteEnvironment', cur.name));
+      }
+    } }, 'Delete'));
+  }
+  const panel = h('div', { class: 'env-panel' }, head);
+  if (!cur) return panel;
+
+  const hosts = cur.hosts || [];
+  const setHosts = async (list) => applyWS(await call('SetHosts', list));
+  const add = h('input', { type: 'text', placeholder: 'api.example.com or *.example.com', 'aria-label': 'Add a host', spellcheck: 'false' });
+  const addHost = () => { const v = add.value.trim(); if (v) setHosts([...hosts, v]); };
+  add.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addHost(); } });
+  panel.append(
+    h('div', { class: 'hosts' },
+      hosts.map((host) => h('span', { class: 'host-chip mono' }, host,
+        h('button', { class: 'icon-btn', title: 'Remove', 'aria-label': 'Remove ' + host, onclick: () => setHosts(hosts.filter((x) => x !== host)) }, '✕'))),
+      add, h('button', { class: 'btn', onclick: addHost }, 'Add host')),
+    h('div', { class: 'hint' }, hosts.length
+      ? `Secrets go only to these hosts in ${cur.name}. Wildcards like *.example.com match subdomains.`
+      : `No hosts listed: Bikasend asks before it sends a secret anywhere except localhost.`));
+  return panel;
+}
+
+function newEnvironmentDialog() {
+  openDialog((close) => {
+    const name = h('input', { type: 'text', placeholder: 'staging', 'aria-label': 'Environment name', spellcheck: 'false' });
+    const error = h('div', { class: 'vc-error', role: 'alert' });
+    return h('form', { class: 'body', onsubmit: async (e) => {
+      e.preventDefault();
+      try {
+        applyWS(await api().CreateEnvironment(name.value.trim()));
+        close();
+      } catch (err) { error.textContent = errText(err); }
+    } },
+    h('h2', {}, 'New environment'),
+    h('p', {}, 'Saved in .bika.json and shared with the team. Add its variables and hosts next.'),
+    name, error,
+    h('div', { class: 'buttons' }, h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'), h('button', { class: 'btn primary', type: 'submit' }, 'Create')));
+  });
+}
+
 function awsPanel() {
   const a = state.ws.aws;
   const text = {
@@ -1442,6 +1544,19 @@ function confirmDialog(title, text, ok, danger) {
       h('div', { class: 'buttons' },
         h('button', { class: 'btn', onclick: () => done(false) }, 'Cancel'),
         h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), onclick: () => done(true) }, ok))));
+  });
+}
+
+// choiceDialog offers several buttons; it resolves with the chosen key, or '' on cancel.
+function choiceDialog(title, text, choices) {
+  return new Promise((resolve) => {
+    const d = $('dialog');
+    const done = (v) => { d.onclose = null; d.close(); resolve(v); };
+    d.onclose = () => resolve('');
+    openDialog(() => h('div', { class: 'body' }, h('h2', {}, title), h('p', {}, text),
+      h('div', { class: 'buttons' },
+        h('button', { class: 'btn', onclick: () => done('') }, 'Cancel'),
+        ...choices.map((c) => h('button', { class: 'btn ' + (c.cls || ''), onclick: () => done(c.key) }, c.label)))));
   });
 }
 

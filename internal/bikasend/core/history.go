@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -195,32 +199,152 @@ func (s *Service) CheckUpdate(ctx context.Context) (bikasend.Update, error) {
 	if !enabled || s.opts.UpdateURL == "" || s.opts.Client == nil {
 		return up, nil
 	}
-	u, err := url.JoinPath(s.opts.UpdateURL, "latest.json")
+	latest, err := s.latestRelease(ctx)
 	if err != nil {
-		return up, errors.Join(bikasend.ErrUpdate, err)
-	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return up, errors.Join(bikasend.ErrUpdate, err)
-	}
-	resp, err := s.opts.Client.Do(req)
-	if err != nil {
-		return up, errors.Join(bikasend.ErrUpdate, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return up, fmt.Errorf("%w: %s", bikasend.ErrUpdate, resp.Status)
-	}
-	var latest site.LatestRelease
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&latest); err != nil {
-		return up, errors.Join(bikasend.ErrUpdate, err)
+		return up, err
 	}
 	up.Latest = latest.Tag
 	up.Available = newer(latest.Tag, s.opts.Version)
 	up.URL = strings.TrimRight(s.opts.UpdateURL, "/") + "/#download"
 	return up, nil
+}
+
+func (s *Service) latestRelease(ctx context.Context) (site.LatestRelease, error) {
+	var latest site.LatestRelease
+	u, err := url.JoinPath(s.opts.UpdateURL, "latest.json")
+	if err != nil {
+		return latest, errors.Join(bikasend.ErrUpdate, err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return latest, errors.Join(bikasend.ErrUpdate, err)
+	}
+	resp, err := s.opts.Client.Do(req)
+	if err != nil {
+		return latest, errors.Join(bikasend.ErrUpdate, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return latest, fmt.Errorf("%w: %s", bikasend.ErrUpdate, resp.Status)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&latest); err != nil {
+		return latest, errors.Join(bikasend.ErrUpdate, err)
+	}
+	return latest, nil
+}
+
+var (
+	// maxUpdate caps a downloaded build; a var so a test can cross it.
+	maxUpdate     int64 = 300 << 20
+	updateName          = regexp.MustCompile(`^Bikasend-v[0-9]+\.[0-9]+\.[0-9]+-[a-z0-9-]+\.zip$`)
+	sha256Hex           = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	platformNames       = map[string]string{"darwin": "macOS", "windows": "Windows", "linux": "Linux"}
+)
+
+// DownloadUpdate saves this platform's newest build to the download folder after checking its
+// SHA-256 against the update site's latest.json. It returns the saved file's path.
+func (s *Service) DownloadUpdate(ctx context.Context) (string, error) {
+	if s.opts.UpdateURL == "" || s.opts.Client == nil {
+		return "", fmt.Errorf("%w: this build has no update site", bikasend.ErrUpdate)
+	}
+	base, err := url.Parse(s.opts.UpdateURL)
+	if err != nil || base.Host == "" {
+		return "", fmt.Errorf("%w: bad update site %q", bikasend.ErrUpdate, s.opts.UpdateURL)
+	}
+	latest, err := s.latestRelease(ctx)
+	if err != nil {
+		return "", err
+	}
+	var dl *site.LatestDownload
+	for i, d := range latest.Downloads {
+		if d.Platform == platformNames[runtime.GOOS] {
+			dl = &latest.Downloads[i]
+			break
+		}
+	}
+	if dl == nil {
+		return "", fmt.Errorf("%w: %s has no build for %s", bikasend.ErrUpdate, latest.Tag, runtime.GOOS)
+	}
+	// Every field comes from the network: the name becomes a file name, the URL a request.
+	ref, err := url.Parse(dl.URL)
+	if !updateName.MatchString(dl.Name) || !sha256Hex.MatchString(dl.SHA256) || err != nil || ref.Scheme != "" || ref.Host != "" || !strings.HasPrefix(ref.Path, "/downloads/") {
+		return "", fmt.Errorf("%w: latest.json has an unexpected download entry", bikasend.ErrUpdate)
+	}
+
+	client := *s.opts.Client
+	client.Timeout = 10 * time.Minute
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		h := req.URL.Hostname()
+		// Plain http only stays on an http update site itself, as in tests; everything else is https.
+		sameSite := req.URL.Scheme == base.Scheme && h == base.Hostname()
+		if len(via) > 5 || (req.URL.Scheme != "https" && !sameSite) {
+			return errors.New("redirect refused")
+		}
+		if h != base.Hostname() && h != "github.com" && !strings.HasSuffix(h, ".githubusercontent.com") {
+			return fmt.Errorf("redirect to %s refused", h)
+		}
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base.ResolveReference(ref).String(), nil)
+	if err != nil {
+		return "", errors.Join(bikasend.ErrUpdate, err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", errors.Join(bikasend.ErrUpdate, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%w: download: %s", bikasend.ErrUpdate, resp.Status)
+	}
+
+	dir := s.downloadDir()
+	tmp, err := os.CreateTemp(dir, ".bikasend-update-*")
+	if err != nil {
+		return "", errors.Join(bikasend.ErrUpdate, err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	sum := sha256.New()
+	n, err := io.Copy(io.MultiWriter(tmp, sum), io.LimitReader(resp.Body, maxUpdate+1))
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return "", errors.Join(bikasend.ErrUpdate, err)
+	}
+	if n > maxUpdate {
+		return "", fmt.Errorf("%w: the download is larger than %d MB", bikasend.ErrUpdate, maxUpdate>>20)
+	}
+	if got := hex.EncodeToString(sum.Sum(nil)); got != dl.SHA256 {
+		return "", fmt.Errorf("%w: SHA-256 mismatch: got %s, want %s", bikasend.ErrUpdate, got, dl.SHA256)
+	}
+	dest := filepath.Join(dir, dl.Name)
+	for i := 1; ; i++ {
+		if _, err := os.Lstat(dest); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		dest = filepath.Join(dir, strings.TrimSuffix(dl.Name, ".zip")+"-"+strconv.Itoa(i)+".zip")
+	}
+	if err := os.Rename(tmp.Name(), dest); err != nil {
+		return "", errors.Join(bikasend.ErrUpdate, err)
+	}
+	return dest, nil
+}
+
+func (s *Service) downloadDir() string {
+	if s.opts.DownloadDir != "" {
+		return s.opts.DownloadDir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return os.TempDir()
+	}
+	if fi, err := os.Stat(filepath.Join(home, "Downloads")); err == nil && fi.IsDir() {
+		return filepath.Join(home, "Downloads")
+	}
+	return home
 }
 
 // newer reports whether tag a is a higher vX.Y.Z than b. A dev build never sees updates.
