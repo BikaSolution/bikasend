@@ -348,6 +348,30 @@ Update `10-security.md` with the new secret rules in the same change as M1.
 | ✅ Recent folders | Switch between repos quickly | P1 | S | ✅ |
 | ✅ Update check | Compare with the site's latest tag, show "update available", verify SHA-256 | P2 | S | ✅ |
 | ✅ Empty and error states with next steps | "No swagger files found: is this the repo root?" | P1 | S | ✅ |
+| ⏳ Secret hover card | See where a `{{secret}}` comes from, reveal it, jump to it in AWS | P2 | M | ✅ |
+| ⏳ Create the config file automatically | No "Create bikasend.json" step before the first shared variable | P2 | S | ✅ |
+
+**Secret hover card.** Hovering a `{{variable}}` chip opens a small card:
+
+- Where the value comes from: scope (session, environment, folder, global), kind and reference, such as
+  `aws: example-service/api-keys → key bikasend` with profile and region, `ssm: /example/api-key`,
+  `env: EXAMPLE_API_KEY` or `prompt`, and when it was loaded.
+- The value stays masked. A **Reveal** button shows it (the existing `Reveal`, an explicit click) and
+  hides it again after 10 seconds. Showing it on hover is out: one stray mouse move during a screen
+  share would leak it (`10-security.md`: reveal and copy are explicit clicks).
+- **Open in AWS console** for `aws` and `ssm` references. Go builds the console URL from the stored,
+  already-validated secret ID and region, and opens it through a new bound method that takes the
+  variable name, never a URL from the webview. Only `https://<region>.console.aws.amazon.com/` URLs.
+  Check the console URL formats for Secrets Manager and Parameter Store when this is built.
+- **Edit** opens the variables drawer at the row that defines the value.
+
+**Create the config file automatically.** Today the user clicks "Create bikasend.json". Instead,
+create it the first time someone saves a folder or environment variable, or picks "New environment",
+with the same starter content as `CreateConfig` and trust pinned to the new file's hash (the app
+wrote it). Do not create it just because a folder was opened: an unasked-for file in someone's repo
+shows up in `git status` and gets committed by accident. Decide the name first (open question 3):
+keep `bikasend.json`, or move to `.bika.json`. A rename reads the old name too for a while, and the
+site, README and rules change with it.
 
 ### Security
 
@@ -411,8 +435,9 @@ Bikasend stays a small, sharp tool. Say no to these unless the human asks for th
    defaults in `bikasend.json` examples and docs.
 2. **Secrets Manager only, or Parameter Store too?** The design supports both; SSM is planned for
    P2.
-3. **File name:** `bikasend.json` in the repo root, or `.bikasend/config.json` to keep the root
-   clean?
+3. **File name:** `bikasend.json` in the repo root (today), `.bika.json` (shorter, hidden), or
+   `.bikasend/config.json` to keep the root clean? Decide before the config file is created
+   automatically (backlog, App experience).
 4. **Prompted values across restarts:** keep them memory-only (current design), or offer the OS
    keychain? A keychain needs `security` (macOS), `secret-tool` (Linux) and the Credential Manager
    (Windows): stdlib via `exec`, but three code paths.
