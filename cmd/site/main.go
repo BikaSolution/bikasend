@@ -22,6 +22,7 @@ func main() {
 	repo := flag.String("repo", "BikaSolution/bikasend", "GitHub repo that publishes the releases")
 	apiURL := flag.String("github-api", "https://api.github.com", "GitHub API base URL")
 	behindTunnel := flag.Bool("behind-cloudflare", false, "trust CF-Connecting-IP from private peers; set only behind the Cloudflare tunnel")
+	publicURL := flag.String("public-url", "", "the site's own https origin, for canonical links and the sitemap")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -35,9 +36,14 @@ func main() {
 	}
 	svc := core.NewService(gh, 5*time.Minute)
 
-	srv := httpserve.New(*port, *host, api.Routes(svc, *behindTunnel))
+	origin, err := api.ParsePublicURL(*publicURL)
+	if err != nil {
+		slog.Error("public url", "error", err)
+		os.Exit(1)
+	}
+	srv := httpserve.New(*port, *host, api.Routes(svc, api.Options{TrustCloudflare: *behindTunnel, PublicURL: origin, Repo: *repo}))
 	go func() {
-		slog.Info("site listening", "host", *host, "port", *port, "repo", *repo, "token_set", token != "", "behind_cloudflare", *behindTunnel)
+		slog.Info("site listening", "host", *host, "port", *port, "repo", *repo, "token_set", token != "", "behind_cloudflare", *behindTunnel, "public_url", origin)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("site stopped", "error", err)
 			os.Exit(1)

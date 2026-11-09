@@ -80,6 +80,8 @@ that crosses a boundary updates it in the same PR.
 - GitHub is a shared, rate-limited resource: keep the release cache, the failure back-off and the
   signed-URL cache. A visitor's request never triggers more than one GitHub call.
 - Download redirects go only to `https` URLs on `github.com` or `*.githubusercontent.com`.
+- Absolute URLs (canonical links, link previews, the sitemap) come from `-public-url`, checked by
+  `api.ParsePublicURL`, never from the request's `Host` or `X-Forwarded-Host` header.
 - Show a SHA-256 for every file so users can check what they run.
 - Listens on `127.0.0.1` by default. Only the Docker image listens on `0.0.0.0`.
 - The container runs as a non-root user on `scratch`, with a read-only root filesystem, no

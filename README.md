@@ -6,7 +6,8 @@
 
 <p align="center">
   <strong>Send requests straight from your Swagger docs.</strong><br>
-  A lightweight desktop API client for services that already document themselves.
+  A lightweight desktop API client for services that already document themselves.<br>
+  <a href="https://send.bikasolutions.co.za"><strong>Download Bikasend</strong></a> · free and open source
 </p>
 
 <p align="center">
@@ -104,8 +105,8 @@ each send (loopback is exempt), and `oauth2` needs a `hosts` list. Press `⌘E` 
 
 ## Download
 
-Get the latest build from the **Bikasend download site** or from this repo's
-[Releases](../../releases). Every build comes from CI and has a SHA-256 checksum.
+Get the latest build from the **[Bikasend download site](https://send.bikasolutions.co.za)** or
+from this repo's [Releases](../../releases). Every build comes from CI and has a SHA-256 checksum.
 
 | Platform | File | Needs |
 | --- | --- | --- |
@@ -189,6 +190,8 @@ TUNNEL_TOKEN=… GITHUB_TOKEN=… docker compose -f deploy/site/docker-compose.y
 - `GITHUB_TOKEN`: a fine-grained token with read-only **Contents** on this repo only. Not needed
   if the repo is public.
 - `TUNNEL_TOKEN`: from the Cloudflare tunnel. Route its public hostname to `http://site:8091`.
+- `-public-url` (set in the compose file): the site's own address. Pages then carry canonical
+  links and link previews, and `/sitemap.xml` exists. Submit it in Google Search Console.
 
 The container is read-only, runs as a non-root user with no capabilities, and has memory, CPU,
 process and log-size limits. It publishes no ports: only the tunnel can reach it.

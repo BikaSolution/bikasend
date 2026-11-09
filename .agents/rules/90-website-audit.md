@@ -57,11 +57,12 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Builds come from CI, from a tagged release | Download | `release.yml` trigger |
 | Not notarised / not code-signed, and the workaround | FAQ | Signing steps in `release.yml` (none today) |
 | SHA-256 next to every download, how to verify | Download, FAQ | `digest` in `pkg/github`; `SHA256` in `internal/site/core/service.go` |
-| Page title and meta description | `<head>` | The one-line description in `.agents/AGENTS.md` |
+| Page title and meta description, also in link previews | `<head>`, `static/og.jpg` | The one-line description in `.agents/AGENTS.md`; `indexTitle`/`indexDescription` in `internal/site/api/handlers.go` |
+| Source on GitHub, MIT licence links | Header, hero, footer | `-repo` flag in `cmd/site`; `LICENSE` |
 | README badges: Go and Wails versions, "1 direct" dependency | `README.md` | `go.mod` |
 | Mascot credit (Go gopher, CC BY 4.0) and font licence | Footer, README | `img/`, `static/OFL-OpenSans.txt` |
 | Maker credit: Plaasbotter | Footer, README | `author` in `cmd/bikasend/wails.json` |
-| Copyright BikaSolutions (footer, README); MIT licence (README) | Footer, README | `companyName` in `cmd/bikasend/wails.json`; `LICENSE` |
+| Copyright BikaSolutions; MIT licence | Footer, README | `companyName` in `cmd/bikasend/wails.json`; `LICENSE` |
 
 A new claim on the site needs a new row here. A row whose source no longer exists means the claim
 must go or change.

@@ -1,9 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-{{template "meta"}}
-<title>Bikasend — API client for Swagger-documented services</title>
-<meta name="description" content="Bikasend is a lightweight desktop API client. Open a repo, pick an operation from its Swagger files, and send the request.">
+{{template "meta" .}}
 </head>
 <body>
 {{- define "platformIcon" -}}
@@ -37,7 +35,7 @@
         {{end}}
       </div>
       {{with .Latest}}
-      <p class="meta-line">{{.Tag}}{{if .Prerelease}} (pre-release){{end}} · Released {{.Published.Format "2 January 2006"}} · <a href="#release-notes">Release notes</a></p>
+      <p class="meta-line">{{.Tag}}{{if .Prerelease}} (pre-release){{end}} · Released {{.Published.Format "2 January 2006"}} · <a href="#release-notes">Release notes</a>{{with $.RepoURL}} · <a href="{{.}}" rel="noopener">Source on GitHub</a>{{end}}</p>
       {{end}}
     </div>
     <div class="visual">

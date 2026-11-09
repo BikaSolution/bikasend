@@ -25,7 +25,14 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+var testOptions = Options{TrustCloudflare: true, PublicURL: "https://send.example.com", Repo: "example/bikasend"}
+
 func newHandler(t *testing.T, releases string, down *atomic.Bool) http.Handler {
+	t.Helper()
+	return newHandlerWith(t, releases, down, testOptions)
+}
+
+func newHandlerWith(t *testing.T, releases string, down *atomic.Bool, opts Options) http.Handler {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if down.Load() {
@@ -46,7 +53,7 @@ func newHandler(t *testing.T, releases string, down *atomic.Bool) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return httpserve.Handler(Routes(core.NewService(gh, time.Hour), true))
+	return httpserve.Handler(Routes(core.NewService(gh, time.Hour), opts))
 }
 
 func TestHandlers(t *testing.T) {
@@ -135,6 +142,45 @@ func TestHandlers(t *testing.T) {
 			excludes: []string{"<img", "<script", "<b>"},
 		},
 		{
+			name:       "index has a canonical link, preview tags and GitHub links from the configuration",
+			path:       "/",
+			wantStatus: http.StatusOK,
+			contains: []string{
+				"<title>Bikasend: open-source Swagger and OpenAPI desktop client</title>",
+				`<link rel="canonical" href="https://send.example.com/">`,
+				`<meta property="og:url" content="https://send.example.com/">`,
+				`<meta property="og:image" content="https://send.example.com/static/og.jpg">`,
+				`<meta name="twitter:card" content="summary_large_image">`,
+				`<a class="hide-sm" href="https://github.com/example/bikasend" rel="noopener">GitHub</a>`,
+				`<a href="https://github.com/example/bikasend/blob/main/LICENSE" rel="noopener">MIT licence</a>`,
+			},
+		},
+		{
+			name:       "changelog has its own canonical link and title",
+			path:       "/changelog",
+			wantStatus: http.StatusOK,
+			contains:   []string{"<title>Changelog: Bikasend</title>", `<link rel="canonical" href="https://send.example.com/changelog">`},
+		},
+		{
+			name:         "robots points to the sitemap",
+			path:         "/robots.txt",
+			wantStatus:   http.StatusOK,
+			contentType:  "text/plain; charset=utf-8",
+			cacheControl: "public, max-age=3600",
+			contains:     []string{"User-agent: *\nAllow: /\n", "Sitemap: https://send.example.com/sitemap.xml"},
+		},
+		{
+			name:        "sitemap lists the pages with the latest release date",
+			path:        "/sitemap.xml",
+			wantStatus:  http.StatusOK,
+			contentType: "application/xml; charset=utf-8",
+			contains: []string{
+				`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
+				"<loc>https://send.example.com/</loc><lastmod>2026-11-01</lastmod>",
+				"<loc>https://send.example.com/changelog</loc>",
+			},
+		},
+		{
 			name:         "latest links relative to the site",
 			path:         "/latest.json",
 			wantStatus:   http.StatusOK,
@@ -195,6 +241,40 @@ func TestHandlers(t *testing.T) {
 	}
 }
 
+func TestLinksIgnoreHostHeader(t *testing.T) {
+	var down atomic.Bool
+	handler := newHandler(t, `[{"tag_name": "v0.1.0"}]`, &down)
+	for _, path := range []string{"/", "/changelog", "/robots.txt", "/sitemap.xml"} {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		r.Host = "evil.example"
+		r.Header.Set("X-Forwarded-Host", "evil.example")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if strings.Contains(w.Body.String(), "evil.example") {
+			t.Errorf("%s: a link used the request's Host header", path)
+		}
+	}
+}
+
+func TestWithoutPublicURL(t *testing.T) {
+	var down atomic.Bool
+	handler := newHandlerWith(t, `[{"tag_name": "v0.1.0"}]`, &down, Options{})
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		return w
+	}
+	if w := get("/sitemap.xml"); w.Code != http.StatusNotFound {
+		t.Errorf("sitemap without a public URL: status %d, want 404", w.Code)
+	}
+	if body := get("/robots.txt").Body.String(); strings.Contains(body, "Sitemap") {
+		t.Errorf("robots without a public URL: %q", body)
+	}
+	if body := get("/").Body.String(); strings.Contains(body, "canonical") || strings.Contains(body, "og:url") || strings.Contains(body, "github.com") {
+		t.Error("index without options must leave out canonical, og:url and GitHub links")
+	}
+}
+
 func TestWithoutReleases(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -211,6 +291,7 @@ func TestWithoutReleases(t *testing.T) {
 		{name: "latest with no releases", releases: `[]`, path: "/latest.json", wantStatus: http.StatusNotFound, contains: `{"error":"no releases"}`},
 		{name: "feed with no releases", releases: `[]`, path: "/feed.xml", wantStatus: http.StatusOK, contains: "<updated>1970-01-01T00:00:00Z</updated>"},
 		{name: "changelog with no releases", releases: `[]`, path: "/changelog", wantStatus: http.StatusOK, contains: "No release has been published yet."},
+		{name: "sitemap when GitHub is down", down: true, path: "/sitemap.xml", wantStatus: http.StatusOK, contains: "<url><loc>https://send.example.com/</loc></url>"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

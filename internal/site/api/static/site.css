@@ -168,7 +168,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
 
 .muted { color: var(--muted); }
 .card h3.card-title { margin-top: 0; }
-footer nav { gap: 20px; }
+footer nav { gap: 8px 20px; flex-wrap: wrap; }
 
 /* Changelog */
 .wrap.narrow { max-width: 860px; }

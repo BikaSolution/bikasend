@@ -51,7 +51,24 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{
 	"css": func() string { return cssURL },
 }).ParseFS(templates, "templates/*.html"))
 
+const (
+	indexTitle       = "Bikasend: open-source Swagger and OpenAPI desktop client"
+	indexDescription = "Free, open-source desktop API client. Open a repo, pick an operation from its Swagger or OpenAPI files, and send it. A small alternative to Postman."
+	changelogTitle   = "Changelog: Bikasend"
+	changelogDesc    = "Every Bikasend release with its notes, downloads and SHA-256 checksums."
+)
+
+type siteLinks struct {
+	publicURL string
+	repoURL   string
+}
+
 type pageData struct {
+	Title       string
+	Description string
+	Path        string
+	PublicURL   string
+	RepoURL     string
 	Latest      *site.Release
 	Primary     *site.Download
 	Recommended string
@@ -61,9 +78,13 @@ type pageData struct {
 	Year        int
 }
 
-func indexHandler(svc site.Service) http.Handler {
+func newPage(links siteLinks, title, description, path string) pageData {
+	return pageData{Title: title, Description: description, Path: path, PublicURL: links.publicURL, RepoURL: links.repoURL, Year: time.Now().Year()}
+}
+
+func indexHandler(svc site.Service, links siteLinks) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data := pageData{Year: time.Now().Year()}
+		data := newPage(links, indexTitle, indexDescription, "/")
 		releases, err := svc.Releases(r.Context())
 		if err != nil {
 			slog.Error("list releases", "error", err)
@@ -87,9 +108,9 @@ func indexHandler(svc site.Service) http.Handler {
 	})
 }
 
-func changelogHandler(svc site.Service) http.Handler {
+func changelogHandler(svc site.Service, links siteLinks) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data := pageData{Year: time.Now().Year()}
+		data := newPage(links, changelogTitle, changelogDesc, "/changelog")
 		releases, err := svc.Releases(r.Context())
 		if err != nil {
 			slog.Error("list releases", "error", err)
@@ -234,6 +255,52 @@ func feedHandler(svc site.Service) http.Handler {
 		enc.Indent("", "  ")
 		if err := enc.Encode(feed); err != nil {
 			slog.Error("write feed", "error", err)
+		}
+	})
+}
+
+func robotsHandler(links siteLinks) http.Handler {
+	body := "User-agent: *\nAllow: /\n"
+	if links.publicURL != "" {
+		body += "\nSitemap: " + links.publicURL + "/sitemap.xml\n"
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		_, _ = io.WriteString(w, body)
+	})
+}
+
+type sitemapURLSet struct {
+	XMLName xml.Name     `xml:"http://www.sitemaps.org/schemas/sitemap/0.9 urlset"`
+	URLs    []sitemapURL `xml:"url"`
+}
+
+type sitemapURL struct {
+	Loc     string `xml:"loc"`
+	LastMod string `xml:"lastmod,omitempty"`
+}
+
+// sitemapHandler needs absolute URLs, so it exists only with a configured public URL.
+func sitemapHandler(svc site.Service, links siteLinks) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if links.publicURL == "" {
+			http.NotFound(w, r)
+			return
+		}
+		lastMod := ""
+		if releases, err := svc.Releases(r.Context()); err == nil && len(releases) > 0 {
+			lastMod = releases[0].Published.UTC().Format("2006-01-02")
+		}
+		set := sitemapURLSet{URLs: []sitemapURL{
+			{Loc: links.publicURL + "/", LastMod: lastMod},
+			{Loc: links.publicURL + "/changelog", LastMod: lastMod},
+		}}
+		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		_, _ = io.WriteString(w, xml.Header)
+		if err := xml.NewEncoder(w).Encode(set); err != nil {
+			slog.Error("write sitemap", "error", err)
 		}
 	})
 }
