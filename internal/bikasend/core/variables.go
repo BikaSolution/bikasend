@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	configName = "bikasend.json"
+	configName = ".bika.json"
 	maxConfig  = 1 << 20
 	maskText   = "••••••"
 )

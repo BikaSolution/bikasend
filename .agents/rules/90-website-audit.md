@@ -35,10 +35,10 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Finds Swagger/OpenAPI JSON and YAML, skips `.git`, `node_modules`, `vendor`, never reads outside the folder | Features, FAQ | `scanSpecs` in `internal/bikasend/core/swagger.go`; `os.OpenRoot` in `core/service.go` |
 | Lists operations by tag; reloads when a spec changes | Features | `app.js` `renderOps`; `Changed` in `core/service.go`; `watch` in `api/handlers.go` |
 | Swagger 2.0, OpenAPI 3.0 and 3.1; `$ref` across files | Features | `parse`, `deref`, `schemaType` in `core/swagger.go`; `core/yaml.go` |
-| `{{variables}}`, environments, a shared `bikasend.json` | Features, How it works | `core/variables.go`, `core/service.go` |
+| `{{variables}}`, environments, a shared `.bika.json` | Features, How it works | `core/variables.go`, `core/service.go` |
 | AWS Secrets Manager and Parameter Store through the user's `aws` CLI | Features, FAQ | `pkg/awscli`; `LoadSecrets` in `core/http.go` |
 | Secrets only to listed hosts, not over plain http, not along cross-host redirects | Features | `guard` and `CheckRedirect` in `core/http.go` |
-| Refuses secret-looking values in `bikasend.json` | FAQ | `guardFileValue` in `core/variables.go` |
+| Refuses secret-looking values in `.bika.json` | FAQ | `guardFileValue` in `core/variables.go` |
 | JSON tree, search, timing, images, spec check, cURL without secrets | Features | `app.js` `renderBody`; `core/validate.go`; `core/curl.go` |
 | The hero screenshot shows the current app | Hero | `static/app.webp`: retake it (generic example repo) when the UI changes |
 | Bodies pre-filled from examples, enums, defaults | Features | `example` in `core/swagger.go` |
@@ -57,6 +57,7 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Builds come from CI, from a tagged release | Download | `release.yml` trigger |
 | Not notarised / not code-signed, and the workaround | FAQ | Signing steps in `release.yml` (none today) |
 | SHA-256 next to every download, how to verify | Download, FAQ | `digest` in `pkg/github`; `SHA256` in `internal/site/core/service.go` |
+| Signed build provenance, `gh attestation verify` from v0.1.4 | FAQ | `Attest build provenance` step in `release.yml` |
 | Page title and meta description, also in link previews | `<head>`, `static/og.jpg` | The one-line description in `.agents/AGENTS.md`; `indexTitle`/`indexDescription` in `internal/site/api/handlers.go` |
 | Source on GitHub, MIT licence links | Header, hero, footer | `-repo` flag in `cmd/site`; `LICENSE` |
 | README badges: Go and Wails versions, "1 direct" dependency | `README.md` | `go.mod` |

@@ -8,8 +8,8 @@ Everything here follows the repo rules: **security first** (`10-security.md`), *
 third-party module** (`00-repo.md`), and **the existing repo layout**. When an
 item would break one of those, it says so.
 
-> **Status (6 Nov 2026):** everything in sections 1 and 2 is built, except the items marked ⏳.
-> ✅ done · ◐ partly done · ⏳ not started. Distribution is next, one step at a time.
+> **Status (9 Nov 2026):** everything in sections 1 and 2 is built, except Distribution, code
+> signing and the frontend smoke test (⏳). ✅ done · ◐ partly done · ⏳ not started.
 > The download site and README describe shipped features only (`90-website-audit.md`).
 
 ---
@@ -88,16 +88,16 @@ Session  >  Environment  >  Folder  >  Global
 | Scope | Where it lives | Shared with the team? | Holds secrets? | Example |
 | --- | --- | --- | --- | --- |
 | **Global** | `<user config dir>/Bikasend/globals.json` | No, it's yours | References only | `{{myName}}`, a personal AWS profile |
-| **Folder** | `bikasend.json` in the repo root, committed | **Yes**, via git | References only | `{{tenant}}`, AWS secret references |
-| **Environment** | `environments` block inside `bikasend.json` | **Yes** | References only | `{{baseUrl}}` per local / staging |
+| **Folder** | `.bika.json` in the repo root, committed | **Yes**, via git | References only | `{{tenant}}`, AWS secret references |
+| **Environment** | `environments` block inside `.bika.json` | **Yes** | References only | `{{baseUrl}}` per local / staging |
 | **Session** | Memory only, gone on quit | No | **Yes** (typed or loaded) | A token you pasted, loaded AWS values |
 
 **How shared secrets work:** the team shares **where** a secret lives, never the secret. The
-committed `bikasend.json` holds references (`aws:example-service/api-keys#bikasend`). Each person's
+committed `.bika.json` holds references (`aws:example-service/api-keys#bikasend`). Each person's
 Bikasend resolves them with their **own** AWS login, so access stays governed by IAM. Nobody pastes
 keys into Slack and nothing secret lands in git.
 
-**`bikasend.json` (committed, safe to share)**
+**`.bika.json` (committed, safe to share)**
 
 ```json
 {
@@ -249,7 +249,7 @@ references written as `{ "ssm": "/example/api-key" }`. A secret picker that list
   came from.
 - 🔒 means secret: masked by default. 👁 asks Go for the value. ⧉ copies via the Wails clipboard,
   so the value doesn't need to be shown.
-- Editing a folder or environment row writes `bikasend.json` (pretty-printed, keys sorted, so git
+- Editing a folder or environment row writes `.bika.json` (pretty-printed, keys sorted, so git
   diffs stay small). Secret-looking names are guarded as in 1.2.
 - "Add variable" asks for the type in plain words: **Text**, **Ask me each session**,
   **From AWS Secrets Manager**, **From an environment variable**.
@@ -275,7 +275,7 @@ Each milestone ships on its own, behind no flags, and gets a website audit (`90-
 | Milestone | Scope | Done when | Effort |
 | --- | --- | --- | --- |
 | ✅ **M1 Variables core** | `{{var}}` in URL, headers and body; Session scope; resolution in Go; undefined blocks Send; Preview | Tests cover nesting, cycles, missing names, escapes; the UI highlights variables | M |
-| ✅ **M2 Shared variables** | `bikasend.json` with Folder and Environment scopes; environment switcher; Swagger pre-fill uses `{{baseUrl}}` | Opening a repo with a `bikasend.json` switches local ↔ staging with no edits | M |
+| ✅ **M2 Shared variables** | `.bika.json` with Folder and Environment scopes; environment switcher; Swagger pre-fill uses `{{baseUrl}}` | Opening a repo with a `.bika.json` switches local ↔ staging with no edits | M |
 | ✅ **M3 AWS secrets** | `pkg/awscli`; `{ "aws": … }` references; SSO sign-in prompt; batch load; AWS pill; Reload / Forget | A teammate clones the repo, signs in with their own profile, and staging calls work. No secret in git, logs or `localStorage` | M |
 | ✅ **M4 Editor** | Variables drawer, autocomplete, hover, ⌘-click, `prompt` variables | Every action works by keyboard; light and dark checked | M |
 | ✅ **M5 Global + guards** | `globals.json`; host binding; plain-HTTP warning; secret-name save guard | Sending a staging secret to another host is blocked, with a test | S |
@@ -284,7 +284,7 @@ Update `10-security.md` with the new secret rules in the same change as M1.
 
 ### 1.6 What changed from the design
 
-- **Folder trust.** A cloned repo's `bikasend.json` decides which hosts get your secrets, so it
+- **Folder trust.** A cloned repo's `.bika.json` decides which hosts get your secrets, so it
   stays off until you trust it. Trust pins the file's sha256; any change from outside asks again.
 - **No proxy in shared files.** A committed file could route all traffic through an attacker, so
   the proxy is a personal setting only. TLS files must be paths inside the repo.
@@ -348,8 +348,8 @@ Update `10-security.md` with the new secret rules in the same change as M1.
 | ✅ Recent folders | Switch between repos quickly | P1 | S | ✅ |
 | ✅ Update check | Compare with the site's latest tag, show "update available", verify SHA-256 | P2 | S | ✅ |
 | ✅ Empty and error states with next steps | "No swagger files found: is this the repo root?" | P1 | S | ✅ |
-| ⏳ Secret hover card | See where a `{{secret}}` comes from, reveal it, jump to it in AWS | P2 | M | ✅ |
-| ⏳ Create the config file automatically | No "Create bikasend.json" step before the first shared variable | P2 | S | ✅ |
+| ✅ Secret hover card | See where a `{{secret}}` comes from, reveal it, jump to it in AWS | P2 | M | ✅ |
+| ✅ Create the config file automatically | No "Create .bika.json" step before the first shared variable | P2 | S | ✅ |
 
 **Secret hover card.** Hovering a `{{variable}}` chip opens a small card:
 
@@ -365,12 +365,12 @@ Update `10-security.md` with the new secret rules in the same change as M1.
   Check the console URL formats for Secrets Manager and Parameter Store when this is built.
 - **Edit** opens the variables drawer at the row that defines the value.
 
-**Create the config file automatically.** Today the user clicks "Create bikasend.json". Instead,
+**Create the config file automatically.** Today the user clicks "Create .bika.json". Instead,
 create it the first time someone saves a folder or environment variable, or picks "New environment",
 with the same starter content as `CreateConfig` and trust pinned to the new file's hash (the app
 wrote it). Do not create it just because a folder was opened: an unasked-for file in someone's repo
 shows up in `git status` and gets committed by accident. The file becomes `.bika.json` (open
-question 3, decided). No migration: nobody uses `bikasend.json` in production yet, so the old name
+question 3, decided). No migration: nobody uses `.bika.json` in production yet, so the old name
 is simply dropped. The site, README, rules and threat model change with it.
 
 ### Security
@@ -378,7 +378,7 @@ is simply dropped. The site, README, rules and threat model change with it.
 | Item | Why | P | Effort | Deps |
 | --- | --- | --- | --- | --- |
 | ⏳ macOS notarisation and Windows code signing | Remove the "unverified developer" steps; users can trust the binary | P1 | M | ✅ (CI secrets + Apple / signing cert) |
-| ◐ SBOM and build provenance on every release | Know what's inside; prove CI built it (`go version -m`, GitHub artifact attestations) | P2 | S | ✅ |
+| ✅ Module list and build provenance on every release | Know what's inside; prove CI built it (`Bikasend-<tag>-modules.txt` from `go version -m`; signed attestations, `gh attestation verify`). A formal SPDX/CycloneDX SBOM would need a generator tool. | P2 | S | ✅ |
 | ✅ Fuzz tests for the Swagger parser | Untrusted files from any repo (`go test -fuzz`) | P2 | S | ✅ |
 | ✅ Content-Security-Policy in the app webview | Same idea as the site, as defence in depth | P2 | S | ✅ |
 | ✅ Monthly scheduled audit | GitHub Action on a cron: `make security` plus an issue when it fails | P2 | S | ✅ |
@@ -432,14 +432,14 @@ Bikasend stays a small, sharp tool. Say no to these unless the human asks for th
 ## 4. Open questions
 
 1. **AWS accounts and regions:** which profiles and regions will most teams use? This sets the
-   defaults in `bikasend.json` examples and docs.
+   defaults in `.bika.json` examples and docs.
 2. **Secrets Manager only, or Parameter Store too?** The design supports both; SSM is planned for
    P2.
 3. ~~**File name**~~ **Decided (9 Nov 2026):** `.bika.json` in the repo root, replacing
-   `bikasend.json`. No migration, since no one uses the old name in production yet.
+   `.bika.json`. No migration, since no one uses the old name in production yet.
 4. **Prompted values across restarts:** keep them memory-only (current design), or offer the OS
    keychain? A keychain needs `security` (macOS), `secret-tool` (Linux) and the Credential Manager
    (Windows): stdlib via `exec`, but three code paths.
 5. **Production guard:** should environments named `prod*` always ask "Send to production?"
    before each request?
-6. **Who owns `bikasend.json` in each service repo:** the service team, or the platform team?
+6. **Who owns `.bika.json` in each service repo:** the service team, or the platform team?

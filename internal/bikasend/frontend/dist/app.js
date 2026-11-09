@@ -136,7 +136,21 @@ function varField({ value, multiline, placeholder, label, tab, onInput, classNam
     checkComplete(input, tab);
     renderChips();
   });
-  input.addEventListener('scroll', () => { hl.scrollTop = input.scrollTop; hl.scrollLeft = input.scrollLeft; });
+  input.addEventListener('scroll', () => { hl.scrollTop = input.scrollTop; hl.scrollLeft = input.scrollLeft; hideVarCard(); });
+  input.addEventListener('mousemove', (e) => {
+    const hit = varAtPoint(hl, e.clientX, e.clientY);
+    if (hit) showVarCardSoon(hit.name, hit.rect, tab);
+    else hideVarCardSoon();
+  });
+  input.addEventListener('mouseleave', hideVarCardSoon);
+  input.addEventListener('click', (e) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const hit = varAtPoint(hl, e.clientX, e.clientY);
+    if (!hit) return;
+    e.preventDefault();
+    hideVarCard();
+    openDrawer(hit.name, !activeVars().has(hit.name));
+  });
   input.addEventListener('keydown', (e) => completeKey(e, input));
   input.addEventListener('blur', () => setTimeout(hideComplete, 150));
   refresh();
@@ -438,11 +452,11 @@ function renderBanners() {
   }
   if (ws && ws.configFile && !ws.trusted && !ws.configError) {
     out.push(h('div', { class: 'banner warn' },
-      h('span', { class: 'grow' }, 'This folder has a bikasend.json. It decides which hosts get your secrets, so it stays off until you trust it.'),
+      h('span', { class: 'grow' }, 'This folder has a .bika.json. It decides which hosts get your secrets, so it stays off until you trust it.'),
       h('button', { class: 'btn primary', onclick: trustDialog }, 'Review and trust')));
   }
   if (ws && ws.configError) {
-    out.push(h('div', { class: 'banner err' }, h('span', { class: 'grow' }, 'bikasend.json: ' + errText(ws.configError))));
+    out.push(h('div', { class: 'banner err' }, h('span', { class: 'grow' }, '.bika.json: ' + errText(ws.configError))));
   }
   if (ws && ws.prompts.length) {
     out.push(h('div', { class: 'banner' },
@@ -686,8 +700,8 @@ function paneAuth(pane, tab) {
   const env = (state.ws.environments || []).find((e) => e.name === state.ws.environment);
   const opts = [
     ['', 'None or headers', 'Send what the Headers tab says, for example Authorization: Bearer {{token}}.', true],
-    ['oauth2', 'OAuth2 client credentials', env && env.oauth2 ? 'Bikasend fetches a token with the environment\'s oauth2 settings and keeps it in memory until it expires.' : 'Add an "oauth2" block (tokenUrl, clientId, clientSecret) to this environment in bikasend.json.', env && env.oauth2],
-    ['sigv4', 'AWS Signature V4', env && env.sigv4 ? 'Bikasend signs the request with the credentials of the environment\'s AWS profile.' : 'Add a "sigv4" block (service, region) and an "aws" profile to this environment in bikasend.json.', env && env.sigv4],
+    ['oauth2', 'OAuth2 client credentials', env && env.oauth2 ? 'Bikasend fetches a token with the environment\'s oauth2 settings and keeps it in memory until it expires.' : 'Add an "oauth2" block (tokenUrl, clientId, clientSecret) to this environment in .bika.json.', env && env.oauth2],
+    ['sigv4', 'AWS Signature V4', env && env.sigv4 ? 'Bikasend signs the request with the credentials of the environment\'s AWS profile.' : 'Add a "sigv4" block (service, region) and an "aws" profile to this environment in .bika.json.', env && env.sigv4],
   ];
   for (const [value, label, help, enabled] of opts) {
     pane.append(h('label', { class: 'row-actions' },
@@ -737,11 +751,111 @@ function renderChips() {
   el.replaceChildren(...names.map((n) => {
     const st = varStatus(n, tab);
     const v = activeVars().get(n);
-    const title = st === 'missing' ? (v && v.error ? `{{${n}}} ${v.error}` : `{{${n}}} is not defined. Click to add it.`)
-      : n === 'baseUrl' && !v ? 'From the spec server: ' + tab.server
-        : `${SCOPE_LABELS[v.scope]} · ${KIND_LABELS[v.kind] || v.kind}${v.secret ? ' · secret' : ' · ' + v.value}`;
-    return h('button', { class: 'chip ' + st, title, onclick: () => openDrawer(n, st === 'missing' && !v) }, (st === 'secret' ? '🔒 ' : st === 'missing' ? '⚠ ' : '') + n);
+    const chip = h('button', { class: 'chip ' + st, 'aria-label': `{{${n}}}, ${st}`, onclick: () => { hideVarCard(); openDrawer(n, st === 'missing' && !v); } }, (st === 'secret' ? '🔒 ' : st === 'missing' ? '⚠ ' : '') + n);
+    const show = () => showVarCardSoon(n, chip.getBoundingClientRect(), tab);
+    chip.addEventListener('mouseenter', show);
+    chip.addEventListener('focus', show);
+    chip.addEventListener('mouseleave', hideVarCardSoon);
+    chip.addEventListener('blur', hideVarCardSoon);
+    return chip;
   }));
+}
+
+// ---------- Variable card ----------
+// Shows where a {{variable}} comes from. Secrets stay masked until an explicit Reveal click.
+
+const MASK = '••••••••';
+const varCard = { el: null, name: '', showTimer: 0, hideTimer: 0, revealTimer: 0 };
+
+// varAtPoint finds the highlighted {{variable}} under the pointer; the overlay sits under the input.
+function varAtPoint(hl, x, y) {
+  for (const m of hl.querySelectorAll('mark')) {
+    for (const r of m.getClientRects()) {
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        const name = (m.textContent.match(/^\{\{\s*([A-Za-z0-9_.$-]+)\s*\}\}$/) || [])[1];
+        if (name) return { name, rect: r };
+      }
+    }
+  }
+  return null;
+}
+
+function showVarCardSoon(name, rect, tab) {
+  clearTimeout(varCard.hideTimer);
+  if (varCard.el && varCard.name === name) return;
+  clearTimeout(varCard.showTimer);
+  varCard.showTimer = setTimeout(() => showVarCard(name, rect, tab), varCard.el ? 0 : 250);
+}
+
+function hideVarCardSoon() {
+  clearTimeout(varCard.showTimer);
+  clearTimeout(varCard.hideTimer);
+  varCard.hideTimer = setTimeout(hideVarCard, 200);
+}
+
+function hideVarCard() {
+  clearTimeout(varCard.showTimer);
+  clearTimeout(varCard.hideTimer);
+  clearTimeout(varCard.revealTimer);
+  if (varCard.el) varCard.el.remove();
+  varCard.el = null;
+  varCard.name = '';
+}
+
+function showVarCard(name, rect, tab) {
+  hideVarCard();
+  const v = activeVars().get(name);
+  const st = varStatus(name, tab);
+  const fromSpec = name === 'baseUrl' && !v && tab && tab.server;
+  const rows = [];
+  const actions = [];
+
+  let label = 'Not defined';
+  if (fromSpec) label = 'From the spec server';
+  else if (v) label = `${v.scope === 'environment' ? 'Env: ' + (state.ws.environment || '') : SCOPE_LABELS[v.scope]} · ${KIND_LABELS[v.kind] || v.kind}`;
+  rows.push(h('div', { class: 'vc-meta' }, label));
+  if (v && v.ref) rows.push(h('div', { class: 'vc-ref mono' }, v.kind === 'prompt' ? 'Asks: ' + v.ref : v.ref));
+
+  if (fromSpec) {
+    rows.push(h('div', { class: 'vc-value mono' }, tab.server));
+  } else if (!v || !v.resolved) {
+    rows.push(h('div', { class: 'vc-note' }, (v && v.error) || 'Not defined in any scope.'));
+  } else if (v.secret) {
+    const value = h('div', { class: 'vc-value mono masked' }, MASK);
+    rows.push(value);
+    actions.push(h('button', { class: 'btn', onclick: async () => {
+      value.textContent = await call('Reveal', name);
+      value.classList.remove('masked');
+      clearTimeout(varCard.revealTimer);
+      varCard.revealTimer = setTimeout(() => { value.textContent = MASK; value.classList.add('masked'); }, 10000);
+    } }, 'Reveal'));
+  } else {
+    rows.push(h('div', { class: 'vc-value mono' }, v.value));
+  }
+
+  if (v && (v.kind === 'aws' || v.kind === 'ssm')) {
+    actions.push(h('button', { class: 'btn', onclick: () => call('OpenSecretSource', name) }, 'Open in AWS'));
+  }
+  if (!fromSpec) {
+    actions.push(h('button', { class: 'btn', onclick: () => { hideVarCard(); openDrawer(name, !v); } }, v ? 'Edit' : 'Add'));
+  }
+
+  const el = h('div', { class: 'var-card ' + st, role: 'dialog', 'aria-label': `{{${name}}}` },
+    h('div', { class: 'vc-head' }, h('span', { class: 'vc-name mono' }, `{{${name}}}`), st === 'secret' ? h('span', { class: 'badge' }, 'secret') : st === 'missing' ? h('span', { class: 'badge err' }, 'missing') : null),
+    ...rows,
+    actions.length ? h('div', { class: 'vc-actions' }, ...actions) : null);
+  el.addEventListener('mouseenter', () => clearTimeout(varCard.hideTimer));
+  el.addEventListener('mouseleave', hideVarCardSoon);
+  document.body.append(el);
+  varCard.el = el;
+  varCard.name = name;
+
+  const w = el.offsetWidth;
+  const ht = el.offsetHeight;
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8));
+  const below = rect.bottom + 6;
+  el.style.left = left + 'px';
+  el.style.top = (below + ht > window.innerHeight - 8 ? Math.max(8, rect.top - ht - 6) : below) + 'px';
 }
 
 // ---------- Rendering: response ----------
@@ -913,7 +1027,7 @@ function welcome() {
     h('button', { class: 'btn primary', onclick: pickFolder }, 'Open folder…'),
     state.ws && state.ws.root ? h('p', {}, h('button', { class: 'link', onclick: () => newTab() }, 'Start a blank request')) : null,
     recent.length ? h('div', { class: 'recent-list' }, h('p', { class: 'muted' }, 'Recent'), recent.map((p) => h('button', { class: 'btn', title: p, onclick: () => openFolder(p) }, basename(p) + ' — ' + p))) : null,
-    h('p', { class: 'muted small' }, `${MOD}K commands · ${MOD}E variables · ${MOD}Enter send`));
+    h('p', { class: 'muted small' }, `${MOD}K commands · ${MOD}E variables · ${MOD}Enter send · hover a {{variable}} to see its source, ${isMac ? '⌘' : 'Ctrl'}-click to edit it`));
 }
 
 // ---------- Variables drawer ----------
@@ -948,8 +1062,10 @@ function defaultScope() {
 function allowedScopes() {
   const ws = state.ws || {};
   const out = ['session'];
-  if (ws.environment) out.push('environment');
-  if (ws.trusted) out.push('folder');
+  // Without a .bika.json, saving to either shared scope creates one.
+  const creatable = ws.root && !ws.configFile;
+  if (ws.environment || creatable) out.push('environment');
+  if (ws.trusted || creatable) out.push('folder');
   out.push('global');
   return out;
 }
@@ -963,15 +1079,14 @@ function renderDrawer() {
 
   if (ws.root && !ws.configFile) {
     body.append(h('div', { class: 'notice' },
-      h('p', {}, 'Share variables with your team: create a bikasend.json in the repo root. It holds names and AWS references, never secret values.'),
-      h('button', { class: 'btn primary', onclick: async () => { applyWS(await call('CreateConfig')); toast('Created bikasend.json'); } }, 'Create bikasend.json')));
+      'Share variables with your team: save one to the environment or folder scope, and Bikasend creates .bika.json in the repo root with a local environment. It holds names and AWS references, never secret values.'));
   } else if (ws.configFile && !ws.trusted && !ws.configError) {
-    body.append(h('div', { class: 'notice warn' }, 'Folder and environment variables are off until you trust this folder\'s bikasend.json. ', h('button', { class: 'link', onclick: trustDialog }, 'Review and trust')));
+    body.append(h('div', { class: 'notice warn' }, 'Folder and environment variables are off until you trust this folder\'s .bika.json. ', h('button', { class: 'link', onclick: trustDialog }, 'Review and trust')));
   }
 
   if (needsAWS()) body.append(awsPanel());
 
-  const scopes = [['active', 'In use'], ...allowedScopes().map((s) => [s, s === 'environment' ? 'Env: ' + ws.environment : SCOPE_LABELS[s]])];
+  const scopes = [['active', 'In use'], ...allowedScopes().map((s) => [s, s === 'environment' ? 'Env: ' + (ws.environment || 'local') : SCOPE_LABELS[s]])];
   body.append(h('div', { class: 'row-actions' },
     h('div', { class: 'scopes' }, scopes.map(([k, l]) => h('button', { class: state.varScope === k ? 'active' : '', onclick: () => { state.varScope = k; renderDrawer(); } }, l))),
     h('span', { class: 'spacer' }),
@@ -1035,7 +1150,7 @@ function editVariable(v) {
 }
 
 async function deleteVariable(v) {
-  const where = v.scope === 'folder' || v.scope === 'environment' ? ' It is removed from bikasend.json.' : '';
+  const where = v.scope === 'folder' || v.scope === 'environment' ? ' It is removed from .bika.json.' : '';
   if (!(await confirmDialog('Delete ' + v.name + '?', `Delete {{${v.name}}} from the ${SCOPE_LABELS[v.scope].toLowerCase()} scope?${where}`, 'Delete', true))) return;
   applyWS(await call('DeleteVariable', v.scope, v.name));
 }
@@ -1050,7 +1165,7 @@ function varEditor() {
     hint ? h('div', { class: 'hint' }, hint) : null,
   ];
   const fields = [];
-  if (e.kind === 'text') fields.push(...field('Value', 'value', '', e.scope === 'session' ? '' : 'Saved in plain text in ' + (e.scope === 'global' ? 'your globals.json' : 'bikasend.json') + '. Never put a secret here.'));
+  if (e.kind === 'text') fields.push(...field('Value', 'value', '', e.scope === 'session' ? '' : 'Saved in plain text in ' + (e.scope === 'global' ? 'your globals.json' : '.bika.json') + '. Never put a secret here.'));
   if (e.kind === 'secret') fields.push(...field('Value', 'value', '', 'Kept in memory only and masked everywhere.', 'password'));
   if (e.kind === 'prompt') fields.push(...field('Question', 'label', 'Local API key', 'Bikasend asks for the value once per session and keeps it in memory.'));
   if (e.kind === 'aws') fields.push(...field('Secret ID', 'value', 'example-service/api-keys', 'Name or ARN in AWS Secrets Manager.'), ...field('JSON key', 'key', 'bikasend', 'Optional: one field of a JSON secret.'));
@@ -1071,7 +1186,7 @@ function varEditor() {
     h('label', { htmlFor: 've-scope' }, 'Scope'),
     h('select', { id: 've-scope', disabled: !e.isNew, onchange: (ev) => { e.scope = ev.target.value; renderDrawer(); } },
       allowedScopes().map((s) => h('option', { value: s, selected: s === e.scope }, s === 'environment' ? 'Environment: ' + state.ws.environment : SCOPE_LABELS[s]))),
-    h('div', { class: 'hint' }, { session: 'This session only. Nothing is saved.', environment: 'Saved in bikasend.json under this environment. Shared with the team.', folder: 'Saved in bikasend.json for every environment. Shared with the team.', global: 'Saved in your own globals.json. Applies to every folder.' }[e.scope]),
+    h('div', { class: 'hint' }, { session: 'This session only. Nothing is saved.', environment: 'Saved in .bika.json under this environment. Shared with the team.', folder: 'Saved in .bika.json for every environment. Shared with the team.', global: 'Saved in your own globals.json. Applies to every folder.' }[e.scope]),
     h('label', { htmlFor: 've-kind' }, 'Type'),
     h('select', { id: 've-kind', onchange: (ev) => { e.kind = ev.target.value; renderDrawer(); } }, kinds.map((k) => h('option', { value: k, selected: k === e.kind }, KIND_LABELS[k]))),
     ...fields.filter(Boolean),
@@ -1147,9 +1262,9 @@ function confirmDialog(title, text, ok, danger) {
 
 function trustDialog() {
   openDialog((close) => h('div', { class: 'body' },
-    h('h2', {}, 'Trust this folder\'s bikasend.json?'),
-    h('p', {}, 'bikasend.json is shared through git. It decides which AWS secrets load and which hosts may receive them. Anyone who can push to this repo can change it.'),
-    h('p', {}, 'Open ', h('span', { class: 'mono' }, basename(state.ws.root) + '/bikasend.json'), ' and check the hosts, tokenUrl and AWS references before you trust it. If the file changes later, Bikasend asks again.'),
+    h('h2', {}, 'Trust this folder\'s .bika.json?'),
+    h('p', {}, '.bika.json is shared through git. It decides which AWS secrets load and which hosts may receive them. Anyone who can push to this repo can change it.'),
+    h('p', {}, 'Open ', h('span', { class: 'mono' }, basename(state.ws.root) + '/.bika.json'), ' and check the hosts, tokenUrl and AWS references before you trust it. If the file changes later, Bikasend asks again.'),
     h('div', { class: 'buttons' },
       h('button', { class: 'btn', onclick: close }, 'Not now'),
       h('button', { class: 'btn primary', onclick: async () => { close(); applyWS(await call('TrustFolder')); toast('Folder trusted'); if (needsAWS()) loadSecrets(false); } }, 'Trust'))));
@@ -1351,8 +1466,11 @@ function wire() {
     else if (mod && e.key.toLowerCase() === 'e') { e.preventDefault(); $('drawer').classList.contains('open') ? closeDrawer() : openDrawer(); }
     else if (mod && e.key.toLowerCase() === 't') { e.preventDefault(); newTab(); }
     else if (mod && e.key.toLowerCase() === 'f' && $('findBox')) { e.preventDefault(); $('findBox').focus(); }
+    else if (e.key === 'Escape' && varCard.el) hideVarCard();
     else if (e.key === 'Escape' && $('drawer').classList.contains('open') && !$('dialog').open) closeDrawer();
   });
+  window.addEventListener('scroll', (e) => { if (!varCard.el || !varCard.el.contains(e.target)) hideVarCard(); }, true);
+  window.addEventListener('blur', hideVarCard);
   if (window.runtime && window.runtime.EventsOn) {
     window.runtime.EventsOn('workspace:changed', () => {
       if (state.ws && state.ws.root) {

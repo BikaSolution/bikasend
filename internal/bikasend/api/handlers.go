@@ -54,7 +54,7 @@ func (a *App) Open(root string) ([]bikasend.Spec, error) {
 	return specs, nil
 }
 
-// watch tells the UI once when a spec file or bikasend.json changes; Open re-arms it.
+// watch tells the UI once when a spec file or .bika.json changes; Open re-arms it.
 func (a *App) watch() {
 	t := time.NewTicker(watchEvery)
 	defer t.Stop()
@@ -82,10 +82,6 @@ func (a *App) Workspace() bikasend.Workspace {
 
 func (a *App) TrustFolder() (bikasend.Workspace, error) {
 	return a.svc.TrustFolder()
-}
-
-func (a *App) CreateConfig() (bikasend.Workspace, error) {
-	return a.svc.CreateConfig()
 }
 
 func (a *App) SelectEnvironment(name string) (bikasend.Workspace, error) {
@@ -186,6 +182,16 @@ func (a *App) SaveResponse(name, body string, isBase64 bool) error {
 		}
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+// OpenSecretSource opens the AWS console page of a variable. The URL is built in Go, never taken from the UI.
+func (a *App) OpenSecretSource(name string) error {
+	u, err := a.svc.SecretConsoleURL(name)
+	if err != nil {
+		return err
+	}
+	runtime.BrowserOpenURL(a.ctx, u)
+	return nil
 }
 
 // OpenURL opens an http(s) link in the default browser.

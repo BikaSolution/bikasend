@@ -27,6 +27,9 @@ type Options struct {
 
 func Routes(svc site.Service, opts Options) httpserve.Router {
 	links := siteLinks{publicURL: opts.PublicURL, repoURL: repoURL(opts.Repo)}
+	if links.repoURL != "" {
+		links.repo = opts.Repo
+	}
 	router := httpserve.Router{TrustCloudflare: opts.TrustCloudflare}
 	router.AddGenericHealthCheck()
 	router.AddMiddleware(httpserve.LogRequests)

@@ -40,6 +40,9 @@ const (
 
 var pathParam = regexp.MustCompile(`\{[A-Za-z0-9_.-]+\}`)
 
+// awsRegion builds a console host name, so it must look like an AWS region and nothing else.
+var awsRegion = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-[0-9]+$`)
+
 type carriesSecretKey struct{}
 
 type built struct {
@@ -636,6 +639,46 @@ func (s *Service) signV4(ctx context.Context, b *built) error {
 	}
 	sigv4.Sign(b.req, b.body, creds, region, b.env.SigV4.Service, time.Now())
 	return nil
+}
+
+func (s *Service) SecretConsoleURL(name string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.session[name]; ok {
+		return "", fmt.Errorf("%w: {{%s}} is a session value; it has no AWS console page", bikasend.ErrInvalidVariable, name)
+	}
+	region := ""
+	if e := s.envConfig(s.env); e != nil && e.AWS != nil {
+		region = e.AWS.Region
+	}
+	for _, d := range s.definitions() {
+		if v, ok := d.vars[name]; ok {
+			return consoleURL(v, region)
+		}
+	}
+	return "", fmt.Errorf("%w: {{%s}} is not defined in any scope", bikasend.ErrUndefinedVariable, name)
+}
+
+// consoleURL builds the console link from the stored reference; the host is fixed, names are escaped.
+func consoleURL(v varValue, region string) (string, error) {
+	host := "console.aws.amazon.com"
+	q := url.Values{}
+	if region != "" {
+		if !awsRegion.MatchString(region) {
+			return "", fmt.Errorf("%w: %q is not an AWS region", bikasend.ErrInvalidConfig, region)
+		}
+		host = region + "." + host
+		q.Set("region", region)
+	}
+	switch v.kind() {
+	case bikasend.KindAWS:
+		q.Set("name", v.AWS)
+		return "https://" + host + "/secretsmanager/secret?" + q.Encode(), nil
+	case bikasend.KindSSM:
+		// The console expects the parameter name escaped twice in the path (/ becomes %252F).
+		return "https://" + host + "/systems-manager/parameters/" + url.PathEscape(url.PathEscape(v.SSM)) + "/description?" + q.Encode(), nil
+	}
+	return "", fmt.Errorf("%w: only aws and ssm values live in the AWS console", bikasend.ErrInvalidVariable)
 }
 
 // LoadSecrets fetches every AWS secret and SSM parameter the active scopes reference.

@@ -236,6 +236,15 @@ mark.find.current { background: #f97316; }
 .palette-item { text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 6px; display: flex; gap: 8px; align-items: baseline; }
 .palette-item.active { background: var(--sel); }
 .palette-item .hint { color: var(--muted); margin-left: auto; font-size: .88em; }
+.var-card { position: fixed; z-index: 45; width: 340px; max-width: calc(100vw - 16px); padding: 10px 12px; background: var(--raised); color: var(--text); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow); font-size: .92em; }
+.var-card.secret { border-top: 3px solid var(--patch); }
+.var-card.missing { border-top: 3px solid var(--err); }
+.var-card .vc-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.var-card .vc-name { font-weight: 600; overflow-wrap: anywhere; }
+.var-card .vc-meta, .var-card .vc-note { color: var(--muted); }
+.var-card .vc-ref, .var-card .vc-value { margin-top: 6px; padding: 5px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow-wrap: anywhere; max-height: 140px; overflow: auto; user-select: text; }
+.var-card .vc-value.masked { color: var(--muted); letter-spacing: .1em; user-select: none; }
+.var-card .vc-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .complete { position: fixed; z-index: 40; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: var(--shadow); max-height: 240px; overflow: auto; min-width: 260px; }
 .complete button { display: flex; width: 100%; gap: 8px; text-align: left; border: 0; border-radius: 0; background: none; padding: 5px 10px; }
 .complete button.active { background: var(--sel); }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +83,7 @@ const testConfig = `{
   }
 }`
 
-// newTestService opens a temp folder holding a swagger file and bikasend.json, with base as BASE.
+// newTestService opens a temp folder holding a swagger file and .bika.json, with base as BASE.
 func newTestService(t *testing.T, base, config string, aws *fakeAWS) (*Service, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -130,7 +132,7 @@ func TestTrust(t *testing.T) {
 
 	w := s.Workspace()
 	if w.Trusted || len(w.Environments) != 0 || w.ConfigFile != configName {
-		t.Fatalf("an untrusted bikasend.json must be ignored: %+v", w)
+		t.Fatalf("an untrusted .bika.json must be ignored: %+v", w)
 	}
 	if _, ok := findVar(w, bikasend.ScopeFolder, "tenant"); ok {
 		t.Error("folder variables visible before trust")
@@ -149,13 +151,13 @@ func TestTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !s.Changed() {
-		t.Error("Changed() missed an edit to bikasend.json")
+		t.Error("Changed() missed an edit to .bika.json")
 	}
 	if _, err := s.Open(root); err != nil {
 		t.Fatal(err)
 	}
 	if s.Workspace().Trusted {
-		t.Error("edited bikasend.json kept its trust")
+		t.Error("edited .bika.json kept its trust")
 	}
 
 	if err := os.WriteFile(filepath.Join(root, configName), make([]byte, maxConfig+1), 0o600); err != nil {
@@ -165,7 +167,7 @@ func TestTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	if s.Workspace().ConfigError == "" {
-		t.Error("an oversized bikasend.json must be refused")
+		t.Error("an oversized .bika.json must be refused")
 	}
 }
 
@@ -221,7 +223,7 @@ func TestVariablesAndScopes(t *testing.T) {
 	}
 	data, _ := os.ReadFile(filepath.Join(root, configName))
 	if !strings.Contains(string(data), `"db_pass": {`) || !strings.Contains(string(data), `"region": "eu"`) {
-		t.Errorf("bikasend.json not updated:\n%s", data)
+		t.Errorf(".bika.json not updated:\n%s", data)
 	}
 	if !s.Workspace().Trusted {
 		t.Error("our own write must keep the trust")
@@ -279,14 +281,18 @@ func TestLoadSecrets(t *testing.T) {
 	}
 }
 
-func TestCreateConfigAndSettings(t *testing.T) {
+func TestConfigCreatedOnFirstSaveAndSettings(t *testing.T) {
 	s, root := newTestService(t, "", "", nil)
-	w, err := s.CreateConfig()
-	if err != nil || !w.Trusted || w.Environment != "local" {
-		t.Fatalf("create config: %+v, %v", w, err)
+	if _, err := os.Stat(filepath.Join(root, configName)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("opening a folder must not create %s: %v", configName, err)
 	}
-	if data, _ := os.ReadFile(filepath.Join(root, configName)); !strings.Contains(string(data), `"baseUrl": "http://localhost:8080/v1"`) {
-		t.Errorf("starter config:\n%s", data)
+	w, err := s.SetVariable(bikasend.ScopeEnvironment, "tenant", bikasend.VariableInput{Kind: bikasend.KindText, Value: "demo"})
+	if err != nil || !w.Trusted || w.Environment != "local" || w.ConfigFile != configName {
+		t.Fatalf("first environment save: %+v, %v", w, err)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, configName))
+	if !strings.Contains(string(data), `"baseUrl": "http://localhost:8080/v1"`) || !strings.Contains(string(data), `"tenant": "demo"`) {
+		t.Errorf("starter config with the saved variable:\n%s", data)
 	}
 
 	w, err = s.SaveSettings(bikasend.Settings{Theme: "purple", FontSize: 99, Proxy: "http://proxy:3128"})
@@ -298,5 +304,111 @@ func TestCreateConfigAndSettings(t *testing.T) {
 	}
 	if got := s.Workspace().Recent; len(got) != 1 || got[0] != root {
 		t.Errorf("recent = %v", got)
+	}
+}
+
+func TestSecretConsoleURL(t *testing.T) {
+	s, _ := newTestService(t, "http://x", testConfig, nil)
+	if _, err := s.TrustFolder(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetVariable(bikasend.ScopeSession, "typed", bikasend.VariableInput{Kind: bikasend.KindSecret, Value: "abcdef"}); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		env, name, want string
+		wantErr         error
+	}{
+		{env: "staging", name: "api_key", want: "https://eu-west-1.console.aws.amazon.com/secretsmanager/secret?name=app%2Fkeys&region=eu-west-1"},
+		{env: "staging", name: "url", want: "https://eu-west-1.console.aws.amazon.com/systems-manager/parameters/%252Fapp%252Furl/description?region=eu-west-1"},
+		{env: "local", name: "tenant", wantErr: bikasend.ErrInvalidVariable},
+		{env: "local", name: "typed", wantErr: bikasend.ErrInvalidVariable},
+		{env: "local", name: "nope", wantErr: bikasend.ErrUndefinedVariable},
+	}
+	for _, tt := range tests {
+		if _, err := s.SelectEnvironment(tt.env); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.SecretConsoleURL(tt.name)
+		if got != tt.want || !errors.Is(err, tt.wantErr) {
+			t.Errorf("%s/%s = %q, %v; want %q, %v", tt.env, tt.name, got, err, tt.want, tt.wantErr)
+		}
+	}
+
+	if got, err := consoleURL(varValue{AWS: "a"}, ""); err != nil || got != "https://console.aws.amazon.com/secretsmanager/secret?name=a" {
+		t.Errorf("no region: %q, %v", got, err)
+	}
+	for _, region := range []string{"evil.com/x", "eu-west-1\n", "eu-west-1.evil.example", "eu-west-1@evil.example", "EU-WEST-1"} {
+		if _, err := consoleURL(varValue{AWS: "a"}, region); !errors.Is(err, bikasend.ErrInvalidConfig) {
+			t.Errorf("region %q must be refused: %v", region, err)
+		}
+	}
+	for _, v := range []varValue{{AWS: "a?b#c/../d"}, {AWS: "arn:aws:secretsmanager:eu-west-1:123456789012:secret:x-AbCdEf"}, {SSM: "../x?y#z"}} {
+		got, err := consoleURL(v, "eu-west-1")
+		u, perr := url.Parse(got)
+		if err != nil || perr != nil || u.Host != "eu-west-1.console.aws.amazon.com" || u.Fragment != "" || strings.Contains(u.Path, "?") {
+			t.Errorf("hostile name %+v: %q, %v", v, got, err)
+		}
+	}
+}
+
+func TestConfigWritesIgnorePlantedSymlinks(t *testing.T) {
+	s, root := newTestService(t, "", "", nil)
+	victim := filepath.Join(root, "victim.txt")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("victim.txt", filepath.Join(root, configName+".tmp")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := s.SetVariable(bikasend.ScopeFolder, "tenant", bikasend.VariableInput{Kind: bikasend.KindText, Value: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(victim); string(data) != "keep" {
+		t.Errorf("a planted %s.tmp symlink redirected the write: victim = %q", configName, data)
+	}
+	if fi, err := os.Lstat(filepath.Join(root, configName)); err != nil || !fi.Mode().IsRegular() {
+		t.Errorf("%s must be a regular file: %v", configName, err)
+	}
+
+	linked, root2 := newTestService(t, "", "", nil)
+	if err := os.WriteFile(filepath.Join(root2, "secret.txt"), []byte("API_KEY=x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("secret.txt", filepath.Join(root2, configName)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := linked.Open(root2); err != nil {
+		t.Fatal(err)
+	}
+	if w := linked.Workspace(); w.ConfigError == "" || strings.Contains(w.ConfigError, "API_KEY") {
+		t.Errorf("a symlinked %s must be refused without reading it: %q", configName, w.ConfigError)
+	}
+	if _, err := linked.SetVariable(bikasend.ScopeFolder, "tenant", bikasend.VariableInput{Kind: bikasend.KindText, Value: "demo"}); !errors.Is(err, bikasend.ErrInvalidConfig) {
+		t.Errorf("saving through a symlinked %s: %v", configName, err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root2, "secret.txt")); string(data) != "API_KEY=x" {
+		t.Errorf("secret.txt changed: %q", data)
+	}
+}
+
+func TestConfigCreateRespectsNewFileAndLocalBase(t *testing.T) {
+	s, root := newTestService(t, "", "", nil)
+	if err := os.WriteFile(filepath.Join(root, configName), []byte(`{"variables":{"team":"theirs"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetVariable(bikasend.ScopeEnvironment, "x", bikasend.VariableInput{Kind: bikasend.KindText, Value: "1"}); !errors.Is(err, bikasend.ErrInvalidConfig) {
+		t.Errorf("a file that appeared after Open must not be overwritten: %v", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, configName)); !strings.Contains(string(data), "theirs") {
+		t.Errorf("the team's file was replaced: %s", data)
+	}
+	if w := s.Workspace(); w.Environment != "" {
+		t.Errorf("a failed create must not switch the environment: %q", w.Environment)
+	}
+
+	s.specs = []bikasend.Spec{{Servers: []string{"https://evil.example"}}}
+	if base := *s.starterConfig().Environments["local"].Variables["baseUrl"].Text; base != "http://localhost:8080" {
+		t.Errorf("a non-loopback spec server must not become the local baseUrl: %q", base)
 	}
 }

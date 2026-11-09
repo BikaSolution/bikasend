@@ -25,6 +25,9 @@ jobs:
     needs: create
     permissions:
       contents: write
+      # Build provenance: GitHub signs a statement that this workflow built each file.
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -97,3 +100,9 @@ jobs:
             go version -m Bikasend > "Bikasend-${TAG}-modules.txt"
             gh release upload "$TAG" "Bikasend-${TAG}-modules.txt" --repo "$GITHUB_REPOSITORY"
           fi
+
+      # Anyone can check a download came from this workflow: gh attestation verify <file> --repo <owner/repo>
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: build/bikasend/bin/Bikasend-*

@@ -60,6 +60,7 @@ const (
 
 type siteLinks struct {
 	publicURL string
+	repo      string
 	repoURL   string
 }
 
@@ -68,6 +69,7 @@ type pageData struct {
 	Description string
 	Path        string
 	PublicURL   string
+	Repo        string
 	RepoURL     string
 	Latest      *site.Release
 	Primary     *site.Download
@@ -79,7 +81,7 @@ type pageData struct {
 }
 
 func newPage(links siteLinks, title, description, path string) pageData {
-	return pageData{Title: title, Description: description, Path: path, PublicURL: links.publicURL, RepoURL: links.repoURL, Year: time.Now().Year()}
+	return pageData{Title: title, Description: description, Path: path, PublicURL: links.publicURL, Repo: links.repo, RepoURL: links.repoURL, Year: time.Now().Year()}
 }
 
 func indexHandler(svc site.Service, links siteLinks) http.Handler {

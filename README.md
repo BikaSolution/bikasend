@@ -40,10 +40,11 @@ don't use.
   variables.
 - **Bodies pre-filled** from the schema's examples, enums and defaults. Path and query
   parameters get their own form. JSON, text, XML, form and multipart (file upload) bodies.
-- **`{{variables}}` everywhere**, highlighted as you type, with autocomplete.
-- **Environments and shared variables.** A committed `bikasend.json` holds environments (local,
-  staging…) and variable definitions for the whole team. Your own `globals.json` holds personal
-  ones.
+- **`{{variables}}` everywhere**, highlighted as you type, with autocomplete. Hover one to see where
+  it comes from, reveal a secret with a click, or open it in the AWS console.
+- **Environments and shared variables.** A committed `.bika.json` holds environments (local,
+  staging…) and variable definitions for the whole team; Bikasend creates it the first time you
+  save a shared variable. Your own `globals.json` holds personal ones.
 - **AWS secrets, loaded into memory.** Reference AWS Secrets Manager or Parameter Store values.
   Bikasend loads them through your own `aws` CLI and SSO login. Nothing secret is ever committed.
 - **Auth helpers.** OAuth2 client credentials and AWS SigV4 signing per environment.
@@ -64,11 +65,11 @@ Write `{{name}}` anywhere in a request. Values come from four scopes, the narrow
 | Scope | Lives in | Shared? |
 | --- | --- | --- |
 | Session | memory, gone when you quit | no |
-| Environment | `bikasend.json` → `environments.<name>.variables` | yes, through git |
-| Folder | `bikasend.json` → `variables` | yes, through git |
+| Environment | `.bika.json` → `environments.<name>.variables` | yes, through git |
+| Folder | `.bika.json` → `variables` | yes, through git |
 | Global | your own `globals.json` (Bikasend's config folder) | no |
 
-`{{baseUrl}}` falls back to the spec's server. A committed `bikasend.json` looks like this:
+`{{baseUrl}}` falls back to the spec's server. A committed `.bika.json` looks like this:
 
 ```json
 {
@@ -99,7 +100,7 @@ AWS login (`aws sso login`, which Bikasend can start for you). Values are: a pla
 `{"ssm": "<parameter>"}` or `{"env": "<VARIABLE>"}`. Environments can also set `timeoutSeconds`,
 `followRedirects`, `tls` (CA and client certificate files in the repo), `oauth2` and `sigv4`.
 
-Bikasend ignores a folder's `bikasend.json` until you trust it, and asks again whenever it changes.
+Bikasend ignores a folder's `.bika.json` until you trust it, and asks again whenever it changes.
 Secrets are only sent to the hosts the environment lists. Any other host needs your confirmation on
 each send (loopback is exempt), and `oauth2` needs a `hosts` list. Press `⌘E` to edit variables.
 
@@ -107,6 +108,8 @@ each send (loopback is exempt), and `oauth2` needs a `hosts` list. Press `⌘E` 
 
 Get the latest build from the **[Bikasend download site](https://send.bikasolutions.co.za)** or
 from this repo's [Releases](../../releases). Every build comes from CI and has a SHA-256 checksum.
+From v0.1.4 on, each file also has signed build provenance:
+`gh attestation verify <file> --repo BikaSolution/bikasend`.
 
 | Platform | File | Needs |
 | --- | --- | --- |

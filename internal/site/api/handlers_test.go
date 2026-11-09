@@ -153,6 +153,7 @@ func TestHandlers(t *testing.T) {
 				`<meta name="twitter:card" content="summary_large_image">`,
 				`<a class="hide-sm" href="https://github.com/example/bikasend" rel="noopener">GitHub</a>`,
 				`<a href="https://github.com/example/bikasend/blob/main/LICENSE" rel="noopener">MIT licence</a>`,
+				"<code>gh attestation verify &lt;file&gt; --repo example/bikasend</code>",
 			},
 		},
 		{

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -54,7 +55,7 @@ type stored struct {
 	Settings bikasend.Settings `json:"settings"`
 	Recent   []string          `json:"recent"`
 	LastEnv  map[string]string `json:"lastEnv"`
-	Trusted  map[string]string `json:"trusted"` // folder → sha256 of its bikasend.json
+	Trusted  map[string]string `json:"trusted"` // folder → sha256 of its .bika.json
 }
 
 type Service struct {
@@ -119,7 +120,7 @@ func NewService(opts Options) *Service {
 	return s
 }
 
-// Open scans root for specs and reads its bikasend.json.
+// Open scans root for specs and reads its .bika.json.
 func (s *Service) Open(root string) ([]bikasend.Spec, error) {
 	r, err := os.OpenRoot(root)
 	if err != nil {
@@ -169,6 +170,10 @@ func (s *Service) resetFolderState() {
 
 func (s *Service) loadFolder() {
 	s.folder, s.folderErr, s.folderHash = configFile{}, "", ""
+	if fi, err := s.root.Lstat(configName); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
+		s.folderErr = configName + " is a symbolic link; Bikasend reads only a regular file"
+		return
+	}
 	data, err := readCapped(s.root.FS(), configName, maxConfig)
 	if errors.Is(err, fs.ErrNotExist) {
 		return
@@ -202,7 +207,7 @@ func (s *Service) loadGlobal() {
 	s.global = c
 }
 
-// trusted reports whether the folder's bikasend.json may be used: the user trusted this exact content.
+// trusted reports whether the folder's .bika.json may be used: the user trusted this exact content.
 func (s *Service) trusted() bool {
 	return s.folderHash != "" && s.state.Trusted[s.rootPath] == s.folderHash
 }
@@ -224,7 +229,7 @@ func (s *Service) TrustFolder() (bikasend.Workspace, error) {
 	return s.workspace(), nil
 }
 
-// fingerprint records modification times of the spec files and bikasend.json.
+// fingerprint records modification times of the spec files and .bika.json.
 func (s *Service) fingerprint() map[string]time.Time {
 	out := map[string]time.Time{}
 	if s.root == nil {
@@ -245,7 +250,7 @@ func (s *Service) fingerprint() map[string]time.Time {
 	return out
 }
 
-// Changed reports whether a spec file or bikasend.json changed since the last Open.
+// Changed reports whether a spec file or .bika.json changed since the last Open.
 // New spec files show up on the next manual rescan; only known files are watched.
 func (s *Service) Changed() bool {
 	s.mu.Lock()
@@ -575,7 +580,7 @@ func (s *Service) DeleteVariable(scope, name string) (bikasend.Workspace, error)
 	return s.workspace(), err
 }
 
-// editFile changes bikasend.json (folder, environment) or globals.json (global) and writes it back.
+// editFile changes .bika.json (folder, environment) or globals.json (global) and writes it back.
 func (s *Service) editFile(scope string, change func(c *configFile, env *environment)) error {
 	switch scope {
 	case bikasend.ScopeGlobal:
@@ -607,6 +612,13 @@ func (s *Service) editFile(scope string, change func(c *configFile, env *environ
 		return fmt.Errorf("%w: fix %s first: %s", bikasend.ErrInvalidConfig, configName, s.folderErr)
 	}
 	c := s.folder
+	create := s.folderHash == ""
+	prevEnv := s.env
+	if create && len(c.Environments) == 0 {
+		// No file yet: the first shared save creates it, with a local environment.
+		c = s.starterConfig()
+		s.env = "local"
+	}
 	if scope == bikasend.ScopeEnvironment {
 		env, ok := c.Environments[s.env]
 		if !ok {
@@ -618,14 +630,11 @@ func (s *Service) editFile(scope string, change func(c *configFile, env *environ
 		change(&c, nil)
 	}
 	data, err := marshalConfig(c)
+	if err == nil {
+		err = s.writeConfig(data, create)
+	}
 	if err != nil {
-		return err
-	}
-	tmp := configName + ".tmp"
-	if err := s.root.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	if err := s.root.Rename(tmp, configName); err != nil {
+		s.env = prevEnv
 		return err
 	}
 	sum := sha256.Sum256(data)
@@ -637,28 +646,48 @@ func (s *Service) editFile(scope string, change func(c *configFile, env *environ
 	return nil
 }
 
-// CreateConfig writes a starter bikasend.json with a local environment.
-func (s *Service) CreateConfig() (bikasend.Workspace, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.root == nil {
-		return s.workspace(), bikasend.ErrNoFolder
+// writeConfig replaces .bika.json through a fresh temp file. A cloned repo can plant either name
+// as a symlink to another file in the folder, such as a git hook, so neither is followed.
+func (s *Service) writeConfig(data []byte, create bool) error {
+	fi, err := s.root.Lstat(configName)
+	switch {
+	case err == nil && fi.Mode()&fs.ModeSymlink != 0:
+		return fmt.Errorf("%w: %s is a symbolic link", bikasend.ErrInvalidConfig, configName)
+	case err == nil && create:
+		return fmt.Errorf("%w: %s appeared on disk; reopen the folder to read it", bikasend.ErrInvalidConfig, configName)
+	case err != nil && !errors.Is(err, fs.ErrNotExist):
+		return err
 	}
-	if s.folderHash != "" {
-		return s.workspace(), nil
+	tmp := configName + ".tmp"
+	// Remove deletes a planted symlink itself, not its target; O_EXCL then refuses anything that reappears.
+	if err := s.root.Remove(tmp); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
+	f, err := s.root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return s.root.Rename(tmp, configName)
+}
+
+// starterConfig fills the local environment's baseUrl from the spec only when it is a loopback URL.
+func (s *Service) starterConfig() configFile {
 	base := "http://localhost:8080"
 	if len(s.specs) > 0 && len(s.specs[0].Servers) > 0 {
-		base = s.specs[0].Servers[0]
+		if u, err := url.Parse(s.specs[0].Servers[0]); err == nil && isLoopback(u.Hostname()) {
+			base = s.specs[0].Servers[0]
+		}
 	}
-	s.folder = configFile{Environments: map[string]environment{
+	return configFile{Environments: map[string]environment{
 		"local": {Variables: map[string]varValue{"baseUrl": {Text: new(base)}}},
 	}}
-	s.folderHash = "new"
-	s.state.Trusted[s.rootPath] = "new"
-	s.env = "local"
-	err := s.editFile(bikasend.ScopeFolder, func(*configFile, *environment) {})
-	return s.workspace(), err
 }
 
 func (s *Service) SetPrompt(name, value string) (bikasend.Workspace, error) {

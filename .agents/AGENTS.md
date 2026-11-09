@@ -80,7 +80,7 @@ internal/
     api/handlers.go              # App: every exported method is a JS-callable API (thin)
     api/routes.go                # Wails options: window, assets, bindings
     core/service.go              # State: folder, trust, environments, variables, settings
-    core/variables.go            # bikasend.json model, {{variable}} resolution, secret guards
+    core/variables.go            # .bika.json model, {{variable}} resolution, secret guards
     core/http.go                 # Build + send requests: auth, TLS, cookies, timing, redaction, AWS
     core/swagger.go, yaml.go     # Scan + parse Swagger 2.0 / OpenAPI 3 (JSON, YAML), $ref, examples
     core/validate.go             # Check responses against the spec
@@ -126,10 +126,10 @@ Before you tag, audit the site's static text against the code (`90-website-audit
 ## How it works
 
 1. **Open** scans the folder through `os.Root` and parses every `*swagger*` / `*openapi*` JSON or
-   YAML file (a YAML file with a JSON twin is skipped). It reads `bikasend.json` but ignores it
+   YAML file (a YAML file with a JSON twin is skipped). It reads `.bika.json` but ignores it
    until the user trusts that exact content.
 2. **Variables** come from four scopes, narrowest first: session (memory) → environment →
-   folder (`bikasend.json`, shared through git) → global (the user's `globals.json`). The spec
+   folder (`.bika.json`, shared through git) → global (the user's `globals.json`). The spec
    server fills `{{baseUrl}}` last. Secrets are references (`aws`, `ssm`, `env`, `prompt`), never
    values in files.
 3. **Send** resolves every `{{variable}}` in Go, applies the guards (allowed hosts, no secrets over

@@ -23,10 +23,13 @@ that crosses a boundary updates it in the same PR.
 
 ## Desktop app
 
-- **Every read stays in the folder.** Scans, `$ref` targets, `bikasend.json` and TLS files go
+- **Every read stays in the folder.** Scans, `$ref` targets, `.bika.json` and TLS files go
   through `os.Root`. The scan reads only `*swagger*` / `*openapi*` JSON and YAML files. Remote
   `$ref` is refused.
-- **`bikasend.json` is untrusted until the user trusts it.** Trust pins the file's sha256; any
+- **Never follow a symlink for a file the app writes.** `os.Root` stops links that leave the
+  folder but follows links inside it, so a repo can point `.bika.json` or its temp file at
+  `.git/hooks/pre-commit`. Check with `Lstat`, remove stale temp files, create them with `O_EXCL`.
+- **`.bika.json` is untrusted until the user trusts it.** Trust pins the file's sha256; any
   change from outside the app asks again. Shared files never hold a proxy, absolute paths or
   secret values (`guardFileValue` refuses secret-looking names with plain text).
 - **Secrets stay in Go memory.** Session values, prompts, AWS values and OAuth2 tokens are never
@@ -47,11 +50,14 @@ that crosses a boundary updates it in the same PR.
 - **No remote code in the webview.** No CDN scripts, no remote fonts, no iframes. Everything ships
   embedded. The CSP meta tag in `index.html` allows `'self'` only: no inline scripts or styles.
 - **Bounded reads.** Responses (`maxBody`), specs (`maxSpec`), all specs in a folder (`maxScan`),
-  uploads (`maxUpload`), `bikasend.json` (`maxConfig`) and aws CLI output are capped. Keep a cap on
+  uploads (`maxUpload`), `.bika.json` (`maxConfig`) and aws CLI output are capped. Keep a cap on
   anything new.
 - **Bounded work.** A small hostile file must not cost unbounded memory or time. YAML nesting
   (`maxYAMLDepth`), generated examples (`maxExampleNodes`, `maxExampleTotal`) and response checks
   (`maxChecks`) have limits. Every loop over untrusted input must consume input on each pass.
+- **The webview never hands Go a URL to open for a secret.** `OpenSecretSource` takes a variable
+  name; Go builds the AWS console URL from the stored reference (`SecretConsoleURL`), with a fixed
+  host and a region that must match an AWS region pattern.
 - **Bound methods are an API.** Every exported method on `api.App` is callable from JS. Add one only
   when the UI needs it, and validate its input in `core`.
 

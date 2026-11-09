@@ -15,7 +15,7 @@ var (
 	ErrInsecureSecret    = errors.New("bikasend: secret over plain http")
 	ErrSecretInFile      = errors.New("bikasend: secret value in a shared file")
 	ErrInvalidVariable   = errors.New("bikasend: invalid variable")
-	ErrInvalidConfig     = errors.New("bikasend: invalid bikasend.json")
+	ErrInvalidConfig     = errors.New("bikasend: invalid .bika.json")
 	ErrNoFolder          = errors.New("bikasend: no folder open")
 	ErrUnknownEnv        = errors.New("bikasend: unknown environment")
 	ErrSecrets           = errors.New("bikasend: load secrets")
