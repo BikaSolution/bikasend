@@ -1,0 +1,23 @@
+version: 3
+workdir: .
+
+allow:
+  depOnAnyVendor: true
+  deepScan: false
+
+components:
+  # Symlinks to pkg/sdk/<svc>. Import pkg/sdk/<svc>; this copy compiles as a separate package.
+  contracts:     { in: internal/* }
+  svc-bikasend:  { in: internal/bikasend/*/** }
+  svc-site:      { in: internal/site/*/** }
+  cmd:           { in: cmd/** }
+  pkg:           { in: pkg/** }
+
+commonComponents:
+  - pkg
+
+deps:
+  cmd:
+    anyProjectDeps: true
+  svc-bikasend: { mayDependOn: [svc-bikasend] }
+  svc-site:     { mayDependOn: [svc-site] }

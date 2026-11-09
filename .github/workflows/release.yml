@@ -1,0 +1,98 @@
+# Push a tag like v0.2.0 to build every platform and publish a GitHub release.
+# The download site reads releases from GitHub, so a new tag shows up there within 5 minutes.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+jobs:
+  create:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
+
+  build:
+    needs: create
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: darwin/universal
+            name: macos-universal
+          - os: windows-2025
+            platform: windows/amd64
+            name: windows-amd64
+          - os: ubuntu-24.04
+            platform: linux/amd64
+            name: linux-amd64
+            tags: webkit2_41
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false # no shared cache in release builds
+
+      - name: Install Linux webview
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
+
+      - name: Test
+        run: go test ./...
+
+      # SITE_URL is a repository variable: the public download site, used by the in-app update check.
+      - name: Build
+        shell: bash
+        working-directory: cmd/bikasend
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TAGS: ${{ matrix.tags }}
+          TAG: ${{ github.ref_name }}
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag must look like v1.2.3"; exit 1 ;; esac
+          case "$SITE_URL" in ""|https://*) ;; *) echo "SITE_URL must be https"; exit 1 ;; esac
+          wails build -clean -skipbindings -trimpath -platform "$PLATFORM" ${TAGS:+-tags "$TAGS"} \
+            -ldflags "-X main.version=$TAG -X main.updateURL=$SITE_URL"
+
+      - name: Package and upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          NAME: ${{ matrix.name }}
+        run: |
+          out="Bikasend-${TAG}-${NAME}.zip"
+          cd build/bikasend/bin
+          case "$RUNNER_OS" in
+            macOS) ditto -c -k --keepParent Bikasend.app "$out" ;;
+            Windows) 7z a -tzip "$out" Bikasend.exe ;;
+            Linux) zip "$out" Bikasend ;;
+          esac
+          gh release upload "$TAG" "$out" --repo "$GITHUB_REPOSITORY"
+          # One list of every Go module inside the app, so anyone can check what shipped.
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            go version -m Bikasend > "Bikasend-${TAG}-modules.txt"
+            gh release upload "$TAG" "Bikasend-${TAG}-modules.txt" --repo "$GITHUB_REPOSITORY"
+          fi

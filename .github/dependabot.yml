@@ -1,0 +1,59 @@
+version: 2
+updates:
+  # GitHub Actions updates
+  - package-ecosystem: github-actions
+    directory: /
+    labels:
+      - dependencies
+      - actions
+    schedule:
+      interval: weekly
+      time: "09:00"
+      timezone: "UTC"
+      day: monday
+
+  # Go modules updates
+  - package-ecosystem: gomod
+    directory: /
+    labels:
+      - dependencies
+      - go
+    schedule:
+      interval: weekly
+      time: "09:00"
+      timezone: "UTC"
+      day: monday
+    # Group security updates and version updates into separate PRs
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      version-updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+
+  # The cloudflared image in the site's compose file (tag and digest)
+  - package-ecosystem: docker-compose
+    directory: /deploy/site
+    labels:
+      - dependencies
+      - docker
+    schedule:
+      interval: weekly
+      time: "09:00"
+      timezone: "UTC"
+      day: monday
+
+  # Docker base images (build/site/Dockerfile)
+  - package-ecosystem: docker
+    directory: /build/site
+    labels:
+      - dependencies
+      - docker
+    schedule:
+      interval: weekly
+      time: "09:00"
+      timezone: "UTC"
+      day: monday

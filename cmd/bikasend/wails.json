@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Bikasend",
+  "outputfilename": "Bikasend",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dir": "../../internal/bikasend/frontend",
+  "assetdir": "../../internal/bikasend/frontend/dist",
+  "build:dir": "../../build/bikasend",
+  "reloaddirs": "../../internal,../../pkg",
+  "author": {
+    "name": "Plaasbotter"
+  },
+  "info": {
+    "companyName": "BikaSolutions",
+    "productName": "Bikasend",
+    "productVersion": "0.1.0"
+  }
+}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{template "meta"}}
+<title>Changelog — Bikasend</title>
+<meta name="description" content="Every Bikasend release with its notes and downloads.">
+</head>
+<body>
+{{template "header" .}}
+
+<main>
+<section>
+  <div class="wrap narrow">
+    <div class="section-head">
+      <h1>Changelog</h1>
+      <p>Every release, newest first. Follow new versions with the <a href="/feed.xml">Atom feed</a>.</p>
+    </div>
+    {{if .Unavailable}}<div class="notice">Release information is unavailable right now. Please try again in a few minutes.</div>{{end}}
+    <div class="releases">
+    {{range .Releases}}{{$tag := .Tag}}
+      <article class="card notes release" id="{{.Tag}}">
+        <div class="release-title">
+          <h2>{{if .Name}}{{.Name}}{{else}}{{.Tag}}{{end}}</h2>
+          <span class="pill">{{.Tag}}</span>
+          {{if .Prerelease}}<span class="pill">Pre-release</span>{{end}}
+          <span class="date">{{.Published.Format "2 January 2006"}}</span>
+        </div>
+        {{template "notes" .Notes}}
+        {{if or .Downloads .Files}}
+        <h4>Downloads</h4>
+        <ul class="files">
+          {{range .Downloads}}<li><a href="/downloads/{{seg $tag}}/{{seg .Name}}">{{.Platform}}</a> · {{.Size}} <span class="mono name">{{.Name}}</span>{{if .SHA256}}<span class="sha mono">SHA-256 {{.SHA256}}</span>{{end}}</li>{{end}}
+          {{range .Files}}<li><a href="/downloads/{{seg $tag}}/{{seg .Name}}">{{.Name}}</a> · {{.Size}}</li>{{end}}
+        </ul>
+        {{end}}
+      </article>
+    {{else}}{{if not .Unavailable}}
+      <div class="card empty">No release has been published yet.</div>
+    {{end}}{{end}}
+    </div>
+  </div>
+</section>
+</main>
+
+{{template "footer" .}}
+</body>
+</html>

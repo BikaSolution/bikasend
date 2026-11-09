@@ -1,0 +1,38 @@
+# Download site behind a Cloudflare tunnel.
+# In the Cloudflare dashboard, route the tunnel's public hostname to http://site:8091.
+# Run: TUNNEL_TOKEN=<token> GITHUB_TOKEN=<token> docker compose -f deploy/site/docker-compose.yml up -d --build
+# GITHUB_TOKEN: fine-grained, read-only "Contents" on the bikasend repo only. Leave unset for a public repo.
+# Never add "ports:": the site trusts CF-Connecting-IP because only the tunnel can reach it.
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: 256m
+  pids_limit: 128
+  cpus: 1.0
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  site:
+    <<: *hardening
+    build:
+      context: ../..
+      dockerfile: build/site/Dockerfile
+    environment:
+      - GITHUB_TOKEN
+      - GOMEMLIMIT=200MiB
+
+  tunnel:
+    <<: *hardening
+    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN
+    depends_on:
+      - site

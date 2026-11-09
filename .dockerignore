@@ -1,0 +1,8 @@
+# Allowlist: the site image needs only its own source. Nothing else, such as .env files, keys
+# or editor settings, can enter the build context.
+*
+!go.mod
+!go.sum
+!cmd/site
+!internal/site
+!pkg

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws://localhost:*; base-uri 'none'; form-action 'none'">
+<title>Bikasend</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="group">
+    <button id="open" class="btn" title="Open folder">Open folder…</button>
+    <select id="recent" class="recent" aria-label="Recent folders" title="Recent folders"></select>
+    <button id="rescan" class="icon-btn" title="Rescan folder" aria-label="Rescan folder">↻</button>
+    <span id="folder" class="folder muted"></span>
+  </div>
+  <div class="group">
+    <label class="env-label" for="env">Environment</label>
+    <select id="env" class="env" aria-label="Environment"></select>
+    <button id="aws" class="pill hidden" type="button"></button>
+    <button id="varsBtn" class="btn" title="Variables (⌘E / Ctrl+E)">Variables</button>
+    <button id="paletteBtn" class="icon-btn" title="Command palette (⌘K / Ctrl+K)" aria-label="Command palette">⌘K</button>
+    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+  </div>
+</header>
+<div id="banners" class="banners" aria-live="polite"></div>
+<div class="layout" id="layout">
+  <aside class="side" id="side">
+    <div class="side-tabs" role="tablist">
+      <button class="side-tab" data-tab="ops" role="tab">Operations</button>
+      <button class="side-tab" data-tab="history" role="tab">History</button>
+    </div>
+    <div id="sideBody" class="side-body"></div>
+  </aside>
+  <div class="resizer" id="sideResizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
+  <main class="main" id="main">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <section class="request" id="request"></section>
+    <div class="resizer horizontal" id="splitResizer" role="separator" aria-orientation="horizontal" aria-label="Resize response" tabindex="0"></div>
+    <section class="response" id="response" aria-live="polite"></section>
+  </main>
+</div>
+
+<aside id="drawer" class="drawer" aria-label="Variables" aria-hidden="true">
+  <div class="drawer-head">
+    <h2>Variables</h2>
+    <input id="varSearch" type="search" placeholder="Search…" aria-label="Search variables">
+    <button id="drawerClose" class="icon-btn" aria-label="Close variables">✕</button>
+  </div>
+  <div id="drawerBody" class="drawer-body"></div>
+</aside>
+
+<dialog id="dialog" class="dialog"></dialog>
+<div id="complete" class="complete hidden" role="listbox" aria-label="Variable suggestions"></div>
+<div id="toast" class="toast hidden" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>

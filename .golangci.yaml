@@ -1,0 +1,71 @@
+version: '2'
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - depguard
+    - errcheck
+    - errname
+    - errorlint
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - intrange
+    - misspell
+    - modernize
+    - noctx
+    - nolintlint
+    - staticcheck
+    - unconvert
+    - unused
+    - usestdlibvars
+    - unparam
+    - usetesting
+  settings:
+    depguard:
+      # One boundary per internal/<service>.
+      # The trailing slash spares the service root (symlinks to pkg/sdk/<svc>) and blocks the rest.
+      rules:
+        boundary-bikasend:
+          list-mode: lax
+          files: ["**/*.go", "!$test", "!**/cmd/**", "!**/internal/bikasend/**"]
+          deny:
+            - pkg: "github.com/BikaSolution/bikasend/internal/bikasend/"
+              desc: "bikasend internals are private: import pkg/sdk/bikasend"
+        boundary-site:
+          list-mode: lax
+          files: ["**/*.go", "!$test", "!**/cmd/**", "!**/internal/site/**"]
+          deny:
+            - pkg: "github.com/BikaSolution/bikasend/internal/site/"
+              desc: "site internals are private: import pkg/sdk/site"
+        core-without-wails:
+          list-mode: lax
+          files: ["**/internal/*/core/**"]
+          deny:
+            - pkg: "github.com/wailsapp/wails"
+              desc: "core stays framework-free and testable; Wails belongs in api/ and cmd/"
+        no-third-party-http:
+          list-mode: lax
+          files: ["**/*.go"]
+          deny:
+            - pkg: "github.com/gin-gonic"
+              desc: "stdlib net/http and pkg/httpserve only"
+            - pkg: "github.com/labstack"
+              desc: "stdlib net/http and pkg/httpserve only"
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - singleCaseSwitch
+  exclusions:
+    rules:
+      # Tests build throwaway files and fake servers on purpose.
+      - path: _test\.go
+        linters: [gosec, noctx, bodyclose]
+
+formatters:
+  enable:
+    - gofmt

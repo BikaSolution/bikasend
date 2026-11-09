@@ -1,0 +1,18 @@
+# Build output
+build/*/bin/
+internal/bikasend/frontend/wailsjs/
+
+*.exe
+*.test
+*.out
+
+.DS_Store
+.idea/
+.vscode/
+
+# Local env and secrets
+.envrc
+*.env
+.env*
+
+.claude/settings*

@@ -1,0 +1,51 @@
+{{define "meta" -}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/static/site.webmanifest">
+<link rel="preload" href="/static/OpenSans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{css}}">
+<link rel="alternate" type="application/atom+xml" title="Bikasend releases" href="/feed.xml">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0f17" media="(prefers-color-scheme: dark)">
+{{- end}}
+
+{{define "header"}}
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Bikasend home">
+      <img src="/static/icon.svg" width="32" height="32" alt="">
+      Bikasend
+    </a>
+    <nav aria-label="Main">
+      <a class="hide-sm" href="/#features">Features</a>
+      <a class="hide-sm" href="/#how">How it works</a>
+      <a class="hide-sm" href="/changelog">Changelog</a>
+      <a href="/#download">Download</a>
+      {{with .Latest}}<span class="pill" title="Latest release"><span class="dot"></span>{{.Tag}}</span>{{end}}
+    </nav>
+  </div>
+</header>
+{{end}}
+
+{{define "footer"}}
+<footer>
+  <div class="wrap">
+    <span>Bikasend{{with .Latest}} {{.Tag}}{{end}} · Made by Plaasbotter</span>
+    <nav aria-label="Footer"><a href="/changelog">Changelog</a><a href="/feed.xml">Atom feed</a></nav>
+    <span>© {{.Year}} BikaSolutions · Go gopher by Renée French, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a></span>
+  </div>
+</footer>
+{{end}}
+
+{{define "notes"}}
+{{range .}}
+  {{if eq .Kind "h"}}<h4>{{.Text}}</h4>
+  {{else if eq .Kind "ul"}}<ul>{{range .Items}}<li>{{.}}</li>{{end}}</ul>
+  {{else}}<p>{{.Text}}</p>{{end}}
+{{else}}
+  <p>No release notes for this version.</p>
+{{end}}
+{{end}}

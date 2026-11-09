@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{template "meta"}}
+<title>Bikasend — API client for Swagger-documented services</title>
+<meta name="description" content="Bikasend is a lightweight desktop API client. Open a repo, pick an operation from its Swagger files, and send the request.">
+</head>
+<body>
+{{- define "platformIcon" -}}
+{{- if eq . "macOS" -}}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>
+{{- else if eq . "Windows" -}}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg>
+{{- else -}}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 10 3 2-3 2M12 15h5"/></svg>
+{{- end -}}
+{{- end -}}
+{{- define "download" -}}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
+{{- end -}}
+
+{{template "header" .}}
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">Desktop API client</p>
+      <h1>Send requests straight from your Swagger docs.</h1>
+      <p class="lead">Bikasend opens a repo, finds its Swagger and OpenAPI files, and turns every operation into a ready-to-send request. There are no collections to build, no account to create and nothing to sync.</p>
+      <div class="cta">
+        {{if .Primary}}
+        <a class="btn primary" href="/downloads/{{seg .Latest.Tag}}/{{seg .Primary.Name}}">{{template "download"}} Download for {{.Primary.Platform}} <small>{{.Latest.Tag}}</small></a>
+        <a class="btn ghost" href="#download">Other platforms</a>
+        {{else}}
+        <span class="btn primary disabled">{{template "download"}} No release yet</span>
+        {{end}}
+      </div>
+      {{with .Latest}}
+      <p class="meta-line">{{.Tag}}{{if .Prerelease}} (pre-release){{end}} · Released {{.Published.Format "2 January 2006"}} · <a href="#release-notes">Release notes</a></p>
+      {{end}}
+    </div>
+    <div class="visual">
+    <img class="mascot" src="/static/mascot.webp" width="520" height="563" alt="">
+    <img class="shot" src="/static/app.webp" width="800" height="496" alt="Bikasend showing the operations of an example API, a request using {{"{{baseUrl}}"}} and a masked API key, and a JSON response.">
+    </div>
+  </div>
+</section>
+
+<section id="features" class="soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Everything you need to call an API. Nothing you don’t.</h2>
+      <p>Bikasend is a stripped-down alternative to Postman and Bruno for teams whose services already document themselves.</p>
+    </div>
+    <div class="grid three">
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+        <h3>Open a folder, get every endpoint</h3>
+        <p>Point it at any repo. It finds every Swagger and OpenAPI file, JSON or YAML, lists the operations by tag, and reloads when a spec changes.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v4l-1 2 1 2v4a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v4l1 2-1 2v4a2 2 0 0 1-2 2h-2"/></svg></div>
+        <h3>Example bodies, filled in</h3>
+        <p>Request bodies come pre-filled from the schema, with examples, enums and defaults, so you change values instead of typing JSON.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16M4 6h16M4 18h10"/></svg></div>
+        <h3>Swagger 2.0 and OpenAPI 3</h3>
+        <p>Reads the files swag generates, plus OpenAPI 3.0 and 3.1, with <code>$ref</code> across files. Path, query and header parameters and auth headers are set up for you.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+        <h3>Secrets stay in memory</h3>
+        <p>API keys and tokens never touch disk or logs. They only go to the hosts your environment lists or a host you confirm, never over plain http without asking, and never along a redirect to another host or to plain http.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></div>
+        <h3>No CORS, no proxies</h3>
+        <p>Requests run natively, not from a browser, so local, staging and internal services just work.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 4 14h7l-1 7 9-11h-7Z"/></svg></div>
+        <h3>Small and fast</h3>
+        <p>About 10 MB, starts instantly and uses your system’s own web view. It works offline, with no account and no telemetry.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4c-2 0-3 1-3 3v2c0 1-1 2-2 3 1 1 2 2 2 3v2c0 2 1 3 3 3M17 4c2 0 3 1 3 3v2c0 1 1 2 2 3-1 1-2 2-2 3v2c0 2-1 3-3 3M9 9l6 6M15 9l-6 6"/></svg></div>
+        <h3>Variables and environments</h3>
+        <p>Write <code>{{"{{baseUrl}}"}}</code> or <code>{{"{{api_key}}"}}</code> anywhere. A <code>bikasend.json</code> in the repo shares environments such as local and staging with the whole team.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3M14 9l2 2"/></svg></div>
+        <h3>AWS secrets, loaded on demand</h3>
+        <p>Reference AWS Secrets Manager or Parameter Store. Bikasend loads the values into memory with your own <code>aws</code> CLI login. The repo only ever holds where a secret lives.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6Z"/></svg></div>
+        <h3>Responses checked against the spec</h3>
+        <p>See a JSON tree, search, timing and images, plus every place the response breaks its schema. Copy any request as cURL, with secrets left out.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>From repo to response in three steps</h2>
+    </div>
+    <div class="grid three steps">
+      <div class="card step">
+        <div class="num">1</div>
+        <h3>Open your repo</h3>
+        <p>Choose any folder that holds your service code. Bikasend scans it for Swagger files and remembers it for next time.</p>
+      </div>
+      <div class="card step">
+        <div class="num">2</div>
+        <h3>Pick an operation</h3>
+        <p>Filter by path, method or summary. The URL, headers and body are filled in. Pick an environment such as local or staging, and variables fill in the rest.</p>
+      </div>
+      <div class="card step">
+        <div class="num">3</div>
+        <h3>Send</h3>
+        <p>Press <code>⌘ Enter</code> or <code>Ctrl Enter</code>. You get the status, time, size, headers and pretty-printed JSON.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="download" class="soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Download{{with .Latest}} {{.Tag}}{{end}}</h2>
+      <p>Every build is produced by CI from a tagged release. Check the SHA-256 before you run it.</p>
+    </div>
+    {{if .Unavailable}}<div class="notice">Release information is unavailable right now. Please try again in a few minutes.</div>{{end}}
+    {{if and .Latest .Latest.Downloads}}
+    <div class="grid three">
+      {{range .Latest.Downloads}}
+      <div class="card dl{{if eq .Platform $.Recommended}} recommended{{end}}">
+        <div class="head">
+          <div class="icon">{{template "platformIcon" .Platform}}</div>
+          <div><h3>{{.Platform}}</h3><div class="sub">{{.Size}}</div></div>
+          {{if eq .Platform $.Recommended}}<span class="pill tag">Your system</span>{{end}}
+        </div>
+        <p class="req">
+          {{- if eq .Platform "macOS"}}macOS 13 or later. Universal build for Apple silicon and Intel.
+          {{- else if eq .Platform "Windows"}}Windows 10 or 11, 64-bit. Uses the WebView2 runtime, which comes with Windows 11.
+          {{- else}}64-bit Linux with GTK 3 and WebKitGTK 4.1 (<code>libwebkit2gtk-4.1-0</code>).{{end -}}
+        </p>
+        <a class="btn {{if eq .Platform $.Recommended}}primary{{else}}ghost{{end}}" href="/downloads/{{seg $.Latest.Tag}}/{{seg .Name}}">{{template "download"}} Download</a>
+        <div class="file mono">{{.Name}}</div>
+        {{if .SHA256}}<div class="sha mono">SHA-256 {{.SHA256}}</div>{{end}}
+      </div>
+      {{end}}
+    </div>
+    {{else if not .Unavailable}}
+    <div class="card empty">No release has been published yet. Builds appear here as soon as a version is tagged.</div>
+    {{end}}
+  </div>
+</section>
+
+{{with .Latest}}
+<section id="release-notes">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>What’s new</h2>
+    </div>
+    <div class="notes-layout">
+      <div class="card notes">
+        <div class="release-title">
+          <h3>{{if .Name}}{{.Name}}{{else}}{{.Tag}}{{end}}</h3>
+          <span class="pill">{{.Tag}}</span>
+          {{if .Prerelease}}<span class="pill">Pre-release</span>{{end}}
+          <span class="date">{{.Published.Format "2 January 2006"}}</span>
+        </div>
+        {{template "notes" .Notes}}
+        {{if .Files}}<h4>Other files</h4><ul>{{range .Files}}<li><a href="/downloads/{{seg $.Latest.Tag}}/{{seg .Name}}">{{.Name}}</a> · {{.Size}}</li>{{end}}</ul>{{end}}
+      </div>
+      <div class="card">
+        <h3 class="card-title">Previous releases</h3>
+        {{if $.Older}}
+        <table>
+          <thead><tr><th scope="col">Version</th><th scope="col">Released</th><th scope="col">Downloads</th></tr></thead>
+          <tbody>
+          {{range $.Older}}{{$tag := .Tag}}
+            <tr>
+              <td><span class="mono">{{.Tag}}</span>{{if .Prerelease}} <span class="pill">pre</span>{{end}}</td>
+              <td>{{.Published.Format "2 Jan 2006"}}</td>
+              <td class="links">{{range .Downloads}}<a href="/downloads/{{seg $tag}}/{{seg .Name}}">{{.Platform}}</a>{{else}}—{{end}}</td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+        {{else}}
+        <p>This is the first release.</p>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</section>
+{{end}}
+
+<section class="soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Install and verify</h2>
+    </div>
+    <details>
+      <summary>macOS blocks the app the first time</summary>
+      <p>Builds are not notarised by Apple yet. Unzip and move <code>Bikasend.app</code> to Applications, then open it once and close the warning. Go to <strong>System Settings → Privacy &amp; Security</strong>, scroll down and click <strong>Open Anyway</strong>. On macOS 14 and earlier you can right-click the app and choose <strong>Open</strong> instead. After that it opens normally.</p>
+    </details>
+    <details>
+      <summary>Windows SmartScreen shows a warning</summary>
+      <p>The executable is not code-signed yet. Choose <strong>More info → Run anyway</strong>. If the window stays blank, install the Microsoft Edge WebView2 runtime. It comes with Windows 11.</p>
+    </details>
+    <details>
+      <summary>Linux: missing library errors</summary>
+      <p>Install GTK and WebKitGTK: <code>sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0</code> on Debian and Ubuntu, or <code>sudo dnf install gtk3 webkit2gtk4.1</code> on Fedora.</p>
+    </details>
+    <details>
+      <summary>How do I verify a download?</summary>
+      <p>Compare the SHA-256 shown next to each download with your file. On macOS and Linux run <code>shasum -a 256 &lt;file&gt;</code>. On Windows run <code>Get-FileHash &lt;file&gt;</code> in PowerShell. Don’t run the file if they don’t match.</p>
+    </details>
+    <details>
+      <summary>Which Swagger files does it read?</summary>
+      <p>Bikasend reads JSON and YAML files whose name contains <code>swagger</code> or <code>openapi</code>, plus the folder’s <code>bikasend.json</code> once you trust it. It skips <code>.git</code>, <code>node_modules</code> and <code>vendor</code>, and never reads a file outside the folder.</p>
+    </details>
+    <details>
+      <summary>Where do my secrets go?</summary>
+      <p>Nowhere but the request. Values you type, values Bikasend asks for, and values it loads from AWS stay in the app’s memory and are gone when you quit. A shared <code>bikasend.json</code> holds only references such as an AWS secret name, and Bikasend refuses to save a secret-looking value in it.</p>
+    </details>
+  </div>
+</section>
+</main>
+
+{{template "footer" .}}
+</body>
+</html>

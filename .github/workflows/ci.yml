@@ -1,0 +1,56 @@
+# Every pull request and every push to main: vet, test, lint, architecture rules and security scans.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # cmd/bikasend links against the Linux webview, so vet and lint need its headers.
+      - name: Install Linux webview
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Format
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+
+      - name: Vet
+        run: go vet -tags webkit2_41 ./...
+
+      - name: Test
+        run: go test -tags webkit2_41 -race ./...
+
+      - name: Fuzz the spec parsers briefly
+        env:
+          GOMEMLIMIT: 512MiB
+        run: |
+          go test ./internal/bikasend/core/ -run '^$' -parallel 2 -fuzz FuzzParseJSON -fuzztime 30s
+          go test ./internal/bikasend/core/ -run '^$' -parallel 2 -fuzz FuzzParseYAML -fuzztime 30s
+
+      - name: Lint
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run --build-tags webkit2_41 ./...
+
+      - name: Architecture rules
+        run: go run github.com/fe3dback/go-arch-lint@v1.15.0 check
+
+      - name: Known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -tags webkit2_41 ./...
+
+      - name: Insecure code patterns
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -quiet -tags webkit2_41 ./...
