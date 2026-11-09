@@ -107,24 +107,28 @@
   <div class="wrap">
     <div class="section-head">
       <h2>From repo to response in three steps</h2>
+      <p>No collection to build first. Your Swagger files already describe every request.</p>
     </div>
-    <div class="grid three steps">
-      <div class="card step">
-        <div class="num">1</div>
+    <ol class="steps">
+      <li class="step">
+        <span class="num" aria-hidden="true">1</span>
         <h3>Open your repo</h3>
-        <p>Choose any folder that holds your service code. Bikasend scans it for Swagger files and remembers it for next time.</p>
-      </div>
-      <div class="card step">
-        <div class="num">2</div>
+        <p>Pick a folder. Bikasend finds its Swagger and OpenAPI files and remembers the folder for next time.</p>
+        <div class="demo" aria-hidden="true"><span class="mono">~/code/example-repo</span><span class="pill">3 specs</span></div>
+      </li>
+      <li class="step">
+        <span class="num" aria-hidden="true">2</span>
         <h3>Pick an operation</h3>
-        <p>Filter by path, method or summary. The URL, headers and body are filled in. Pick an environment such as local or staging, and variables fill in the rest.</p>
-      </div>
-      <div class="card step">
-        <div class="num">3</div>
+        <p>Filter by path, method or summary. The URL, headers and body come filled in, and an environment such as staging fills the variables.</p>
+        <div class="demo" aria-hidden="true"><span class="mono m GET">GET</span><span class="mono">/items/{id}</span></div>
+      </li>
+      <li class="step">
+        <span class="num" aria-hidden="true">3</span>
         <h3>Send</h3>
-        <p>Press <code>⌘ Enter</code> or <code>Ctrl Enter</code>. You get the status, time, size, headers and pretty-printed JSON.</p>
-      </div>
-    </div>
+        <p>Press <kbd>⌘</kbd> <kbd>Enter</kbd> or <kbd>Ctrl</kbd> <kbd>Enter</kbd>. See the status, time, size, headers and pretty-printed JSON.</p>
+        <div class="demo" aria-hidden="true"><span class="ok">200 OK</span><span class="mono muted">42 ms · 116 B</span></div>
+      </li>
+    </ol>
   </div>
 </section>
 

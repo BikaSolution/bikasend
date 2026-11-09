@@ -89,9 +89,17 @@ section.soft { background: var(--bg-soft); border-top: 1px solid var(--line); bo
 .icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .icon svg { width: 21px; height: 21px; }
 
-.steps { counter-reset: step; }
-.step { position: relative; padding-left: 0; }
-.step .num { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: var(--text); color: var(--bg); }
+/* How it works: a numbered timeline, a line between the badges */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
+.step { position: relative; }
+.step:not(:last-child)::after { content: ""; position: absolute; top: 20px; left: 56px; right: -24px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--line-strong)); opacity: .55; }
+.step .num { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; background: var(--accent-soft); color: var(--accent-text); border: 2px solid var(--accent); }
+.step h3 { font-size: 18px; margin: 18px 0 6px; letter-spacing: -.01em; }
+.step p { margin: 0 0 16px; color: var(--text-soft); font-size: 15px; }
+.demo { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); font-size: 13.5px; color: var(--text); }
+.demo .m { font-weight: 700; }
+.demo .ok { color: var(--get); font-weight: 700; }
+kbd { font-family: inherit; font-size: .82em; font-weight: 600; padding: 1px 6px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); color: var(--text); white-space: nowrap; }
 
 /* Downloads */
 .dl { display: flex; flex-direction: column; }
@@ -143,6 +151,11 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
   .visual { margin-bottom: 56px; }
   .mascot { left: -12px; bottom: -76px; width: 132px; }
   .grid.three { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; gap: 32px; }
+  .step { padding-left: 60px; }
+  .step .num { position: absolute; left: 0; top: 0; }
+  .step h3 { margin-top: 6px; }
+  .step:not(:last-child)::after { top: 48px; bottom: -24px; left: 19px; right: auto; width: 2px; height: auto; background: linear-gradient(180deg, var(--accent), var(--line-strong)); }
   nav a.hide-sm { display: none; }
   section { padding: 64px 0; }
 }
