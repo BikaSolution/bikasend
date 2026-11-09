@@ -1,0 +1,36 @@
+# GitHub's hosted macOS pool sometimes never assigns a runner, and the job is cancelled.
+# Rerun the release then, at most 3 times. A real build or test failure is left for a person.
+name: retry-macos
+
+on:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  retry:
+    if: github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.run_attempt < 4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Rerun when only macOS jobs never got a runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          case "$RUN_ID$ATTEMPT" in *[!0-9]*) echo "unexpected run id"; exit 1 ;; esac
+          unassigned=$(gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs" --jq '
+            [.jobs[] | select(.conclusion != "success" and .conclusion != "skipped")]
+            | length > 0 and all(.name | startswith("build (macos")) and all(.conclusion == "cancelled" and (.runner_name // "") == "")')
+          if [ "$unassigned" != "true" ]; then
+            echo "Not a runner shortage; leaving the failure for a person."
+            exit 0
+          fi
+          echo "macOS never got a runner (attempt $ATTEMPT); rerunning the failed jobs."
+          gh run rerun "$RUN_ID" --failed --repo "$REPO"

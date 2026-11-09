@@ -29,7 +29,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15
+          # Intel runners: GitHub's arm64 macOS pool kept leaving the job unassigned. Still a Universal build.
+          - os: macos-15-intel
             platform: darwin/universal
             name: macos-universal
           - os: windows-2025

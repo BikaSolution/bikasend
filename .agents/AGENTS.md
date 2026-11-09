@@ -102,7 +102,7 @@ pkg/
 build/                           # App icon and Wails platform files; site Dockerfile
 deploy/site/docker-compose.yml   # site + cloudflared (pinned by digest)
 docs/threat-model.md             # Assets, trust boundaries, threats and mitigations
-.github/workflows/               # ci.yml (every PR), release.yml (tags), audit.yml (monthly)
+.github/workflows/               # ci.yml (every PR), release.yml (tags), audit.yml (monthly), retry-macos.yml
 .golangci.yaml, .go-arch-lint.yml, .pre-commit-config.yaml
 ```
 
@@ -111,7 +111,8 @@ docs/threat-model.md             # Assets, trust boundaries, threats and mitigat
 1. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 2. `release.yml` creates the GitHub release with generated notes, builds on native macOS, Windows
    and Linux runners with the version and the site URL (repository variable `SITE_URL`) baked in,
-   and uploads `Bikasend-<tag>-<platform>.zip` plus `Bikasend-<tag>-modules.txt`.
+   and uploads `Bikasend-<tag>-<platform>.zip` plus `Bikasend-<tag>-modules.txt`. When GitHub
+   assigns no macOS runner, `retry-macos.yml` reruns that job, at most 3 times.
 3. The site lists the newest 10 releases (drafts hidden) and refreshes every 5 minutes. GitHub
    provides the SHA-256 of every asset; the site shows it. The app asks `/latest.json` for updates.
 4. A download goes `/downloads/<tag>/<file>` → GitHub's short-lived signed URL. The site never

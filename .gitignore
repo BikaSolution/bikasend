@@ -16,3 +16,5 @@ internal/bikasend/frontend/wailsjs/
 .env*
 
 .claude/settings*
+
+tmp/

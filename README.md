@@ -166,7 +166,8 @@ git push origin v0.2.0
 
 [`release.yml`](.github/workflows/release.yml) builds macOS, Windows and Linux on native
 runners and publishes a GitHub release with generated notes. The download site picks it up
-within 5 minutes.
+within 5 minutes. If GitHub has no macOS runner free, `retry-macos.yml` reruns that job, at
+most 3 times.
 
 Before tagging, check that the site still describes the app correctly
 ([`90-website-audit.md`](.agents/rules/90-website-audit.md)).
