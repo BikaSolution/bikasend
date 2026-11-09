@@ -86,19 +86,41 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
+// callLog records the bridge calls, to explain a failing UI step.
+type callLog struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (l *callLog) add(line string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lines = append(l.lines, line)
+}
+
+func (l *callLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.Join(l.lines, "\n")
+}
+
 // serveCall runs one bound method on the real core service, the way Wails would.
-func serveCall(svc *core.Service) http.HandlerFunc {
+func serveCall(svc *core.Service, log *callLog) http.HandlerFunc {
 	ctxType := reflect.TypeFor[context.Context]()
 	errType := reflect.TypeFor[error]()
 	return func(w http.ResponseWriter, r *http.Request) {
+		method := strings.TrimPrefix(r.URL.Path, "/__call/")
 		reply := func(result any, err error) {
 			out := map[string]any{"result": result}
 			if err != nil {
 				out["error"] = err.Error()
+				log.add(method + ": " + err.Error())
+			} else {
+				log.add(method)
 			}
 			_ = json.NewEncoder(w).Encode(out)
 		}
-		m := reflect.ValueOf(svc).MethodByName(strings.TrimPrefix(r.URL.Path, "/__call/"))
+		m := reflect.ValueOf(svc).MethodByName(method)
 		if !m.IsValid() {
 			reply(nil, errors.New("not available in UI tests"))
 			return
@@ -161,8 +183,12 @@ type cdpReply struct {
 // startChrome runs headless Chrome with a fresh profile and its background networking off.
 func startChrome(t *testing.T, chrome string) *devtools {
 	t.Helper()
+	profile, err := os.MkdirTemp("", "bikasend-chrome-")
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd := exec.Command(chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=0", // #nosec G204 -- the test's own browser path.
-		"--user-data-dir="+t.TempDir(), "--no-first-run", "--no-default-browser-check", "--disable-extensions",
+		"--user-data-dir="+profile, "--no-first-run", "--no-default-browser-check", "--disable-extensions",
 		"--disable-background-networking", "--disable-sync", "--disable-component-update", "--disable-default-apps",
 		"--window-size=1280,900", "about:blank")
 	stderr, err := cmd.StderrPipe()
@@ -172,7 +198,13 @@ func startChrome(t *testing.T, chrome string) *devtools {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		// Chrome's helper processes can still be writing; a leftover temp profile is harmless.
+		time.Sleep(200 * time.Millisecond)
+		_ = os.RemoveAll(profile)
+	})
 
 	found := make(chan string, 1)
 	go func() {
@@ -417,7 +449,8 @@ func TestUI(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServerFS(dist))
-	mux.Handle("/__call/", serveCall(svc))
+	calls := &callLog{}
+	mux.Handle("/__call/", serveCall(svc, calls))
 	app := httptest.NewServer(mux)
 	defer app.Close()
 
@@ -443,7 +476,12 @@ func TestUI(t *testing.T) {
 				return
 			}
 			if time.Now().After(deadline) {
-				t.Fatalf("%s: timed out waiting for %s", step, expr)
+				var text string
+				_ = d.eval(`document.body.innerText.slice(0, 1500)`, &text)
+				d.mu.Lock()
+				errs := strings.Join(d.errs, "\n")
+				d.mu.Unlock()
+				t.Fatalf("%s: timed out waiting for %s\n--- bridge calls:\n%s\n--- JS exceptions:\n%s\n--- page text:\n%s", step, expr, calls, errs, text)
 			}
 			time.Sleep(50 * time.Millisecond)
 		}
