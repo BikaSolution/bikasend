@@ -332,10 +332,6 @@ function wireRequest(tab) {
   };
 }
 
-function urlHost(u) {
-  return (u.match(/^https?:\/\/([^/?#]+)/) || [])[1] || '';
-}
-
 async function send(tab) {
   if (!tab) return;
   if (tab.sending) {
@@ -345,7 +341,7 @@ async function send(tab) {
   const req = wireRequest(tab);
   let preview = await api().Preview(req);
   if (preview.blockedBy === 'unlisted' || preview.blockedBy === 'hosts') {
-    const host = urlHost(preview.url);
+    const host = preview.host;
     const ws = state.ws;
     const cur = (ws.environments || []).find((e) => e.name === ws.environment);
     // A shared host list lives in .bika.json; with no file yet, saving one creates it with a local environment.
@@ -354,8 +350,9 @@ async function send(tab) {
     const choices = [];
     let text;
     if (preview.blockedBy === 'hosts') {
-      text = `Environment "${envName}" sends secrets only to its listed hosts, and ${host} is not one of them. The URL can come from the spec file.`;
-      if (canSave) choices.push({ key: 'save', label: `Add to ${envName}'s hosts and send`, cls: 'primary' });
+      // A strict list stays strict: no send from here. Adding a host is a separate, deliberate edit.
+      text = `Environment "${envName}" sends secrets only to its listed hosts, and ${host} is not one of them. The URL can come from the spec file. If you trust ${host}, add it in the environment's hosts, then send again.`;
+      if (canSave) choices.push({ key: 'edit', label: 'Edit hosts…' });
     } else {
       text = `No environment lists ${host} in its hosts, and the URL can come from the spec file. Send your secret only if you trust ${host}.`;
       choices.push({ key: 'once', label: 'Send once', cls: 'danger' });
@@ -363,6 +360,10 @@ async function send(tab) {
     }
     const pick = await choiceDialog(`Send a secret to ${host}?`, text, choices);
     if (!pick) return;
+    if (pick === 'edit') {
+      openDrawer();
+      return;
+    }
     if (pick === 'save') {
       applyWS(await call('SetHosts', [...((cur && cur.hosts) || []), host]));
       toast(`${host} added to ${envName}'s hosts`);
@@ -372,7 +373,7 @@ async function send(tab) {
     preview = await api().Preview(req);
   }
   if (preview.blockedBy === 'insecure') {
-    const host = urlHost(preview.url) || 'this host';
+    const host = preview.host || 'this host';
     const ok = await confirmDialog('Send a secret without TLS?', `This request sends a secret to ${host} over plain http. Anyone on the network path can read it.`, 'Send anyway', true);
     if (!ok) return;
     req.allowInsecure = true;
@@ -484,7 +485,7 @@ function renderBanners() {
     let text = `Bikasend ${up.latest} is available (you have ${up.current}).`;
     let action = h('button', { class: 'btn primary', disabled: !!up.busy, onclick: downloadUpdate }, up.busy ? 'Downloading…' : 'Download and verify');
     if (up.saved) {
-      text = `Saved ${up.saved}. Its SHA-256 matches the release. Unzip it and replace the app you are running.`;
+      text = `Saved ${up.saved}. Its SHA-256 matches the checksum the update site published. Unzip it and replace the app you are running.`;
       action = null;
     } else if (up.error) {
       text = `The download failed: ${up.error}`;
@@ -1456,7 +1457,11 @@ function envPanel() {
   panel.append(
     h('div', { class: 'hosts' },
       hosts.map((host) => h('span', { class: 'host-chip mono' }, host,
-        h('button', { class: 'icon-btn', title: 'Remove', 'aria-label': 'Remove ' + host, onclick: () => setHosts(hosts.filter((x) => x !== host)) }, '✕'))),
+        h('button', { class: 'icon-btn', title: 'Remove', 'aria-label': 'Remove ' + host, onclick: async () => {
+          // An empty list is not stricter: it switches back to asking before each new host.
+          if (hosts.length === 1 && !(await confirmDialog('Remove the last host?', `With no hosts, ${cur.name} asks before it sends a secret to any host except localhost, instead of refusing hosts outside the list.`, 'Remove', true))) return;
+          setHosts(hosts.filter((x) => x !== host));
+        } }, '✕'))),
       add, h('button', { class: 'btn', onclick: addHost }, 'Add host')),
     h('div', { class: 'hint' }, hosts.length
       ? `Secrets go only to these hosts in ${cur.name}. Wildcards like *.example.com match subdomains.`

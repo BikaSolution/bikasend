@@ -24,7 +24,7 @@ const (
 
 var (
 	namePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
-	hostPattern = regexp.MustCompile(`^(\*\.)?[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?$`)
+	hostPattern = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?$`)
 	// {{{{text}}}} sends a literal {{text}}; {{ name }} is a variable.
 	varRef = regexp.MustCompile(`\{\{\{\{([^{}]*)\}\}\}\}|\{\{\s*([A-Za-z0-9_.$-]+)\s*\}\}`)
 )
@@ -187,7 +187,7 @@ func parseConfig(data []byte, global bool) (configFile, error) {
 			return c, errors.Join(bikasend.ErrInvalidConfig, fmt.Errorf("environment name %q", name))
 		}
 		for _, h := range env.Hosts {
-			if !hostPattern.MatchString(h) {
+			if !validHost(h) {
 				return c, errors.Join(bikasend.ErrInvalidConfig, fmt.Errorf("%s: host %q", name, h))
 			}
 		}
@@ -241,6 +241,20 @@ func guardFileValue(name string, v varValue) error {
 		return fmt.Errorf("%w: %q looks secret; keep it in the session, ask each session, or reference AWS", bikasend.ErrSecretInFile, name)
 	}
 	return nil
+}
+
+// validHost accepts api.example.com, localhost:8080 or *.example.com, but no wildcard over a
+// top-level name such as *.com, which would let a secret go to any host under it.
+func validHost(h string) bool {
+	h = strings.ToLower(h)
+	if len(h) > 253 || !hostPattern.MatchString(h) {
+		return false
+	}
+	if rest, ok := strings.CutPrefix(h, "*."); ok {
+		name, _, _ := strings.Cut(rest, ":")
+		return strings.Contains(name, ".")
+	}
+	return true
 }
 
 func isOnlyReference(s string) bool {

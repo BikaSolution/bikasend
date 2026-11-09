@@ -209,8 +209,33 @@ func (s *Service) CheckUpdate(ctx context.Context) (bikasend.Update, error) {
 	return up, nil
 }
 
+// updateClient copies the app's client with a redirect rule: the update site itself, and with
+// github true also GitHub's download hosts over https.
+func (s *Service) updateClient(base *url.URL, timeout time.Duration, github bool) *http.Client {
+	c := *s.opts.Client
+	c.Timeout = timeout
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) > 5 {
+			return errors.New("too many redirects")
+		}
+		if req.URL.Scheme == base.Scheme && req.URL.Host == base.Host {
+			return nil
+		}
+		h := req.URL.Hostname()
+		if github && req.URL.Scheme == "https" && (h == "github.com" || strings.HasSuffix(h, ".githubusercontent.com")) {
+			return nil
+		}
+		return fmt.Errorf("redirect to %s refused", req.URL.Host)
+	}
+	return &c
+}
+
 func (s *Service) latestRelease(ctx context.Context) (site.LatestRelease, error) {
 	var latest site.LatestRelease
+	base, err := url.Parse(s.opts.UpdateURL)
+	if err != nil || base.Host == "" {
+		return latest, fmt.Errorf("%w: bad update site %q", bikasend.ErrUpdate, s.opts.UpdateURL)
+	}
 	u, err := url.JoinPath(s.opts.UpdateURL, "latest.json")
 	if err != nil {
 		return latest, errors.Join(bikasend.ErrUpdate, err)
@@ -221,7 +246,7 @@ func (s *Service) latestRelease(ctx context.Context) (site.LatestRelease, error)
 	if err != nil {
 		return latest, errors.Join(bikasend.ErrUpdate, err)
 	}
-	resp, err := s.opts.Client.Do(req)
+	resp, err := s.updateClient(base, 10*time.Second, false).Do(req)
 	if err != nil {
 		return latest, errors.Join(bikasend.ErrUpdate, err)
 	}
@@ -238,7 +263,7 @@ func (s *Service) latestRelease(ctx context.Context) (site.LatestRelease, error)
 var (
 	// maxUpdate caps a downloaded build; a var so a test can cross it.
 	maxUpdate     int64 = 300 << 20
-	updateName          = regexp.MustCompile(`^Bikasend-v[0-9]+\.[0-9]+\.[0-9]+-[a-z0-9-]+\.zip$`)
+	updateName          = regexp.MustCompile(`^Bikasend-v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}-[a-z0-9-]{1,40}\.zip$`)
 	sha256Hex           = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	platformNames       = map[string]string{"darwin": "macOS", "windows": "Windows", "linux": "Linux"}
 )
@@ -257,6 +282,9 @@ func (s *Service) DownloadUpdate(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if !newer(latest.Tag, s.opts.Version) {
+		return "", fmt.Errorf("%w: %s is not newer than this build (%s)", bikasend.ErrUpdate, latest.Tag, s.opts.Version)
+	}
 	var dl *site.LatestDownload
 	for i, d := range latest.Downloads {
 		if d.Platform == platformNames[runtime.GOOS] {
@@ -269,29 +297,15 @@ func (s *Service) DownloadUpdate(ctx context.Context) (string, error) {
 	}
 	// Every field comes from the network: the name becomes a file name, the URL a request.
 	ref, err := url.Parse(dl.URL)
-	if !updateName.MatchString(dl.Name) || !sha256Hex.MatchString(dl.SHA256) || err != nil || ref.Scheme != "" || ref.Host != "" || !strings.HasPrefix(ref.Path, "/downloads/") {
+	if !updateName.MatchString(dl.Name) || !strings.HasPrefix(dl.Name, "Bikasend-"+latest.Tag+"-") || !sha256Hex.MatchString(dl.SHA256) || err != nil || ref.Scheme != "" || ref.Host != "" || !strings.HasPrefix(ref.Path, "/downloads/") {
 		return "", fmt.Errorf("%w: latest.json has an unexpected download entry", bikasend.ErrUpdate)
 	}
 
-	client := *s.opts.Client
-	client.Timeout = 10 * time.Minute
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		h := req.URL.Hostname()
-		// Plain http only stays on an http update site itself, as in tests; everything else is https.
-		sameSite := req.URL.Scheme == base.Scheme && h == base.Hostname()
-		if len(via) > 5 || (req.URL.Scheme != "https" && !sameSite) {
-			return errors.New("redirect refused")
-		}
-		if h != base.Hostname() && h != "github.com" && !strings.HasSuffix(h, ".githubusercontent.com") {
-			return fmt.Errorf("redirect to %s refused", h)
-		}
-		return nil
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base.ResolveReference(ref).String(), nil)
 	if err != nil {
 		return "", errors.Join(bikasend.ErrUpdate, err)
 	}
-	resp, err := client.Do(req)
+	resp, err := s.updateClient(base, 10*time.Minute, true).Do(req)
 	if err != nil {
 		return "", errors.Join(bikasend.ErrUpdate, err)
 	}
@@ -320,17 +334,21 @@ func (s *Service) DownloadUpdate(ctx context.Context) (string, error) {
 	if got := hex.EncodeToString(sum.Sum(nil)); got != dl.SHA256 {
 		return "", fmt.Errorf("%w: SHA-256 mismatch: got %s, want %s", bikasend.ErrUpdate, got, dl.SHA256)
 	}
-	dest := filepath.Join(dir, dl.Name)
-	for i := 1; ; i++ {
-		if _, err := os.Lstat(dest); errors.Is(err, os.ErrNotExist) {
-			break
+	// Link fails when the name exists, so a file already there is never replaced, even in a race.
+	for i := range 100 {
+		dest := filepath.Join(dir, dl.Name)
+		if i > 0 {
+			dest = filepath.Join(dir, strings.TrimSuffix(dl.Name, ".zip")+"-"+strconv.Itoa(i)+".zip")
 		}
-		dest = filepath.Join(dir, strings.TrimSuffix(dl.Name, ".zip")+"-"+strconv.Itoa(i)+".zip")
+		err := os.Link(tmp.Name(), dest)
+		if err == nil {
+			return dest, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", errors.Join(bikasend.ErrUpdate, err)
+		}
 	}
-	if err := os.Rename(tmp.Name(), dest); err != nil {
-		return "", errors.Join(bikasend.ErrUpdate, err)
-	}
-	return dest, nil
+	return "", fmt.Errorf("%w: too many files named %s in %s", bikasend.ErrUpdate, dl.Name, dir)
 }
 
 func (s *Service) downloadDir() string {

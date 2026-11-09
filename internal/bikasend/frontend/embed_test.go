@@ -31,8 +31,9 @@ import (
 )
 
 // bridge stands in for the Wails runtime: window.go.api.App.X(...) becomes POST /__call/X.
+// TOKEN is a per-run secret; the custom header also forces a CORS preflight for other origins.
 const bridge = `window.go = { api: { App: new Proxy({}, { get: (_, method) => async (...args) => {
-  const r = await fetch('/__call/' + method, { method: 'POST', body: JSON.stringify(args) });
+  const r = await fetch('/__call/' + method, { method: 'POST', headers: { 'X-Bridge-Token': 'TOKEN' }, body: JSON.stringify(args) });
   const out = await r.json();
   if (out.error) throw out.error;
   return out.result;
@@ -104,11 +105,16 @@ func (l *callLog) String() string {
 	return strings.Join(l.lines, "\n")
 }
 
-// serveCall runs one bound method on the real core service, the way Wails would.
-func serveCall(svc *core.Service, log *callLog) http.HandlerFunc {
+// serveCall runs one bound method on the real core service, the way Wails would. It answers only
+// the test's own page: the per-run token and a same-origin fetch.
+func serveCall(svc *core.Service, log *callLog, token string) http.HandlerFunc {
 	ctxType := reflect.TypeFor[context.Context]()
 	errType := reflect.TypeFor[error]()
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("X-Bridge-Token") != token || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		method := strings.TrimPrefix(r.URL.Path, "/__call/")
 		reply := func(result any, err error) {
 			out := map[string]any{"result": result}
@@ -450,7 +456,12 @@ func TestUI(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServerFS(dist))
 	calls := &callLog{}
-	mux.Handle("/__call/", serveCall(svc, calls))
+	tok := make([]byte, 16)
+	if _, err := rand.Read(tok); err != nil {
+		t.Fatal(err)
+	}
+	token := fmt.Sprintf("%x", tok)
+	mux.Handle("/__call/", serveCall(svc, calls, token))
 	app := httptest.NewServer(mux)
 	defer app.Close()
 
@@ -503,9 +514,10 @@ func TestUI(t *testing.T) {
 	}
 
 	call("watch for page errors", "Runtime.enable", nil)
-	call("install the Go bridge", "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": bridge})
+	call("enable page events", "Page.enable", nil)
+	call("install the Go bridge", "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": strings.Replace(bridge, "TOKEN", token, 1)})
 	call("load the app", "Page.navigate", map[string]any{"url": app.URL})
-	waitFor("the app starts", `!!document.querySelector('#open') && typeof openFolder === 'function'`)
+	waitFor("the app starts with the bridge", `!!document.querySelector('#open') && typeof openFolder === 'function' && !!window.go`)
 	rootJSON, _ := json.Marshal(root)
 	must("open the folder", d.eval(fmt.Sprintf("openFolder(%s)", rootJSON), nil))
 	waitFor("the operation is listed", `!!document.querySelector('button.op')`)

@@ -175,7 +175,7 @@ func (s *Service) build(ctx context.Context, r bikasend.Request) (*built, error)
 	case "sigv4":
 		hl = append(hl, "Authorization: AWS4-HMAC-SHA256 "+maskText+" (SigV4)")
 	}
-	b.preview.Method, b.preview.URL = method, exp.mask(req.URL.String())
+	b.preview.Method, b.preview.URL, b.preview.Host = method, exp.mask(req.URL.String()), exp.mask(req.URL.Host)
 	b.preview.Headers = exp.mask(strings.Join(hl, "\n"))
 	b.preview.Body = exp.mask(preview)
 	b.preview.Used = exp.used

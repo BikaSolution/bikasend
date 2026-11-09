@@ -442,7 +442,7 @@ func TestEnvironmentsAndHosts(t *testing.T) {
 	if data, _ := os.ReadFile(filepath.Join(root, configName)); !strings.Contains(string(data), `"*.example.com"`) {
 		t.Errorf("hosts not saved:\n%s", data)
 	}
-	for _, bad := range [][]string{{"https://api.example.com"}, {"api.example.com/path"}, {"a b"}, make([]string, 0)} {
+	for _, bad := range [][]string{{"https://api.example.com"}, {"api.example.com/path"}, {"a b"}, {"*.com"}, {"-bad.example.com"}, {"api..example.com"}, make([]string, 0)} {
 		if len(bad) == 0 {
 			for i := range maxHosts + 1 {
 				bad = append(bad, fmt.Sprintf("h%d.example.com", i))

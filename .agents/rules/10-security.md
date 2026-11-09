@@ -40,11 +40,13 @@ that crosses a boundary updates it in the same PR.
   secret over plain http without a confirmation; no redirect with a secret to another host or from
   https to http; loaded secrets are masked and redacted raw and URL-escaped. Do not weaken any of them.
 - **The update download trusts nothing it reads.** `DownloadUpdate` fetches only from the update
-  site baked into the build, follows redirects only to that site and GitHub hosts, checks the file
-  name and SHA-256 from `latest.json`, caps the size and never overwrites a file. It never runs or
-  opens the download.
-- **Hosts lists change only on an explicit click** ("Always allow", "Add to hosts", the editor),
-  and never weaken a list: a host outside a non-empty list is refused, not confirmed per send.
+  site baked into the build, follows redirects only to that site and GitHub hosts, refuses a
+  version that is not newer and a name that does not match the tag, checks the SHA-256 from
+  `latest.json`, caps the size and saves with `os.Link`, which never overwrites a file. It never
+  runs or opens the download. The hash proves what the update site published, nothing more.
+- **Hosts lists change only on an explicit click** ("Always allow" when there is no list, or the
+  environment editor). A host outside a non-empty list is refused; the send dialog only offers to
+  open the editor, never to send. Show hosts as Go parsed them (`Preview.Host`).
 - **Uploads come from the file dialog only.** A spec, cURL import or history entry never chooses a
   local file. `addFile` accepts only paths recorded by `PickFile` in this session.
 - **The aws CLI is called without a shell.** Every ID, profile and region matches a pattern that

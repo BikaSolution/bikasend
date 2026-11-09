@@ -103,6 +103,13 @@ func TestDownloadUpdate(t *testing.T) {
 	dir := t.TempDir()
 	s.opts.DownloadDir = dir
 
+	s.opts.Version = "v9.9.9"
+	entry = dl(plat, name, good, "/downloads/v9.9.9/"+name)
+	if _, err := s.DownloadUpdate(context.Background()); !errors.Is(err, bikasend.ErrUpdate) {
+		t.Errorf("the same or an older version must not download: %v", err)
+	}
+	s.opts.Version = "v1.2.3"
+
 	entry = dl(plat, name, good, "/downloads/v9.9.9/"+name)
 	for _, want := range []string{name, "Bikasend-v9.9.9-test-1.zip"} {
 		path, err := s.DownloadUpdate(context.Background())
@@ -124,6 +131,8 @@ func TestDownloadUpdate(t *testing.T) {
 		{name: "a redirect to another host", entry: dl(plat, name, good, "/downloads/away")},
 		{name: "no build for this platform", entry: dl("Plan 9", name, good, "/downloads/v9.9.9/"+name)},
 		{name: "larger than the cap", entry: dl(plat, name, good, "/downloads/v9.9.9/"+name), max: 4},
+		{name: "a name for another tag", entry: dl(plat, "Bikasend-v1.0.0-test.zip", good, "/downloads/v9.9.9/x")},
+		{name: "a name that is too long", entry: dl(plat, "Bikasend-v9.9.9-"+strings.Repeat("a", 300)+".zip", good, "/downloads/v9.9.9/x")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

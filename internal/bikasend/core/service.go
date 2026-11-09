@@ -429,19 +429,19 @@ func (s *Service) DeleteEnvironment(name string) (bikasend.Workspace, error) {
 func (s *Service) SetHosts(hosts []string) (bikasend.Workspace, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(hosts) > maxHosts {
+		return s.workspace(), fmt.Errorf("%w: at most %d hosts per environment", bikasend.ErrInvalidConfig, maxHosts)
+	}
 	clean := make([]string, 0, len(hosts))
 	for _, h := range hosts {
 		h = strings.ToLower(strings.TrimSpace(h))
 		if h == "" || slices.Contains(clean, h) {
 			continue
 		}
-		if !hostPattern.MatchString(h) {
+		if !validHost(h) {
 			return s.workspace(), fmt.Errorf("%w: %q is not a host name; use api.example.com, *.example.com or localhost:8080", bikasend.ErrInvalidConfig, h)
 		}
 		clean = append(clean, h)
-	}
-	if len(clean) > maxHosts {
-		return s.workspace(), fmt.Errorf("%w: at most %d hosts per environment", bikasend.ErrInvalidConfig, maxHosts)
 	}
 	err := s.editFile(bikasend.ScopeEnvironment, func(_ *configFile, env *environment) {
 		env.Hosts = clean

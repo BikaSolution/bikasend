@@ -238,7 +238,7 @@ func TestSecretGuards(t *testing.T) {
 	if _, err := s.Send(context.Background(), req); !errors.Is(err, bikasend.ErrSecretHost) {
 		t.Errorf("secret to a host no environment lists: err = %v", err)
 	}
-	if p := s.Preview(req); p.BlockedBy != "unlisted" {
+	if p := s.Preview(req); p.BlockedBy != "unlisted" || p.Host != "example.invalid" {
 		t.Errorf("unlisted preview = %+v", p)
 	}
 	if _, err := s.Send(context.Background(), bikasend.Request{Method: "GET", URL: srv.URL, Headers: "Authorization: Bearer {{token}}"}); err != nil {
