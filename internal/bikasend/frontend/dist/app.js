@@ -140,16 +140,15 @@ function varField({ value, multiline, placeholder, label, tab, onInput, classNam
   input.addEventListener('mousemove', (e) => {
     const hit = varAtPoint(hl, e.clientX, e.clientY);
     if (hit) showVarCardSoon(hit.name, hit.rect, tab);
-    else hideVarCardSoon();
+    else if (!onCardPath(e.clientX, e.clientY)) hideVarCardSoon();
   });
-  input.addEventListener('mouseleave', hideVarCardSoon);
+  input.addEventListener('mouseleave', (e) => { if (!onCardPath(e.clientX, e.clientY)) hideVarCardSoon(); });
   input.addEventListener('click', (e) => {
     if (!(e.metaKey || e.ctrlKey)) return;
     const hit = varAtPoint(hl, e.clientX, e.clientY);
     if (!hit) return;
     e.preventDefault();
-    hideVarCard();
-    openDrawer(hit.name, !activeVars().has(hit.name));
+    openVariable(hit.name);
   });
   input.addEventListener('keydown', (e) => completeKey(e, input));
   input.addEventListener('blur', () => setTimeout(hideComplete, 150));
@@ -653,9 +652,58 @@ function paneParams(pane, tab, op) {
   if (!r.pathParams.length && !r.query.length) pane.append(h('p', { class: 'muted' }, 'This request has no parameters. Path parameters like {id} in the URL appear here when you open an operation.'));
 }
 
+const COMMON_HEADERS = ['Accept', 'Accept-Encoding', 'Accept-Language', 'Authorization', 'Cache-Control', 'Content-Type', 'Cookie',
+  'Idempotency-Key', 'If-Match', 'If-None-Match', 'Origin', 'Prefer', 'Range', 'User-Agent', 'X-API-Key', 'X-Correlation-ID', 'X-Request-ID'];
+
+function parseHeaders(text) {
+  return String(text || '').split('\n').filter((l) => l.trim() !== '').map((l) => {
+    const i = l.indexOf(':');
+    return i < 0 ? { name: l.trim(), value: '', enabled: true } : { name: l.slice(0, i).trim(), value: l.slice(i + 1).trim(), enabled: true };
+  });
+}
+
+// headerText is what Go receives: enabled rows only, one "Name: value" per line.
+// A header name cannot hold ':' or whitespace; Go would split the line at the first ':'.
+function headerText(rows) {
+  return rows.map((r) => ({ ...r, name: r.name.replace(/[:\s]/g, '') }))
+    .filter((r) => r.enabled && r.name).map((r) => `${r.name}: ${r.value}`).join('\n');
+}
+
 function paneHeaders(pane, tab) {
-  pane.append(varField({ value: tab.req.headers, multiline: true, label: 'Headers', placeholder: 'Name: value', tab, onInput: (v) => { tab.req.headers = v; } }),
-    h('p', { class: 'muted small' }, 'One "Name: value" per line. Lines with an empty value are not sent. Type {{ for variables.'));
+  const r = tab.req;
+  const toggle = h('button', { class: 'link', onclick: () => { tab.headersBulk = !tab.headersBulk; renderRequest(); } }, tab.headersBulk ? 'Edit as a table' : 'Bulk edit');
+  if (tab.headersBulk) {
+    pane.append(varField({ value: r.headers, multiline: true, label: 'Headers', placeholder: 'Name: value', tab, onInput: (v) => { r.headers = v; } }),
+      h('div', { class: 'row-actions' }, h('span', { class: 'muted small grow' }, 'One "Name: value" per line. Lines with an empty value are not sent. Type {{ for variables.'), toggle));
+    return;
+  }
+  // Rows live on the tab; reparse when the text changed elsewhere (operation, cURL import, history, bulk edit).
+  if (!tab.headerRows || tab.headerSrc !== r.headers) {
+    tab.headerRows = parseHeaders(r.headers);
+    tab.headerSrc = r.headers;
+  }
+  const rows = tab.headerRows;
+  const sync = () => {
+    r.headers = headerText(rows);
+    tab.headerSrc = r.headers;
+    tab.dirty = true;
+    renderChips();
+  };
+  if (!$('header-names')) document.body.append(h('datalist', { id: 'header-names' }, COMMON_HEADERS.map((n) => h('option', { value: n }))));
+  const tbody = h('tbody');
+  const draw = () => tbody.replaceChildren(...rows.map((row, i) => h('tr', { class: row.enabled ? '' : 'off' },
+    h('td', { class: 'narrow' }, h('input', { type: 'checkbox', checked: row.enabled, 'aria-label': 'Send ' + (row.name || 'header'), onchange: (e) => { row.enabled = e.target.checked; sync(); draw(); } })),
+    h('td', { class: 'hname-cell' }, h('input', { type: 'text', value: row.name, list: 'header-names', spellcheck: 'false', placeholder: 'Header', 'aria-label': 'Header name', oninput: (e) => { row.name = e.target.value; sync(); } })),
+    h('td', {}, varField({ value: row.value, label: 'Value of ' + (row.name || 'header'), placeholder: 'Value', tab, onInput: (v) => { row.value = v; sync(); } })),
+    h('td', { class: 'narrow' }, h('button', { class: 'icon-btn', 'aria-label': 'Remove ' + (row.name || 'header'), onclick: () => { rows.splice(i, 1); sync(); draw(); } }, '✕')))));
+  draw();
+  pane.append(
+    h('table', { class: 'kv headers-edit' }, h('thead', {}, h('tr', {}, h('th', {}), h('th', {}, 'Header'), h('th', {}, 'Value'), h('th', {}))), tbody),
+    h('div', { class: 'row-actions' },
+      h('button', { class: 'btn', onclick: () => { rows.push({ name: '', value: '', enabled: true }); draw(); const last = tbody.querySelector('tr:last-child input[type=text]'); if (last) last.focus(); } }, '+ Header'),
+      h('span', { class: 'muted small grow' }, 'Rows with an empty value are not sent. Type {{ for variables.'),
+      toggle));
+  if (!rows.length) pane.append(h('p', { class: 'muted' }, 'No headers yet. Auth headers from the spec appear here when you open an operation.'));
 }
 
 function paneBody(pane, tab) {
@@ -751,7 +799,7 @@ function renderChips() {
   el.replaceChildren(...names.map((n) => {
     const st = varStatus(n, tab);
     const v = activeVars().get(n);
-    const chip = h('button', { class: 'chip ' + st, 'aria-label': `{{${n}}}, ${st}`, onclick: () => { hideVarCard(); openDrawer(n, st === 'missing' && !v); } }, (st === 'secret' ? '🔒 ' : st === 'missing' ? '⚠ ' : '') + n);
+    const chip = h('button', { class: 'chip ' + st, 'aria-label': `{{${n}}}, ${st}`, onclick: () => openVariable(n) }, (st === 'secret' ? '🔒 ' : st === 'missing' ? '⚠ ' : '') + n);
     const show = () => showVarCardSoon(n, chip.getBoundingClientRect(), tab);
     chip.addEventListener('mouseenter', show);
     chip.addEventListener('focus', show);
@@ -765,7 +813,16 @@ function renderChips() {
 // Shows where a {{variable}} comes from. Secrets stay masked until an explicit Reveal click.
 
 const MASK = '••••••••';
-const varCard = { el: null, name: '', showTimer: 0, hideTimer: 0, revealTimer: 0 };
+const varCard = { el: null, name: '', anchor: null, showTimer: 0, hideTimer: 0, revealTimer: 0 };
+
+// onCardPath is true between the variable and its card, so moving the mouse across keeps it open.
+function onCardPath(x, y) {
+  if (!varCard.el || !varCard.anchor) return false;
+  const a = varCard.anchor;
+  const c = varCard.el.getBoundingClientRect();
+  return x >= Math.min(a.left, c.left) - 4 && x <= Math.max(a.right, c.right) + 4
+    && y >= Math.min(a.top, c.top) - 4 && y <= Math.max(a.bottom, c.bottom) + 4;
+}
 
 // varAtPoint finds the highlighted {{variable}} under the pointer; the overlay sits under the input.
 function varAtPoint(hl, x, y) {
@@ -790,7 +847,7 @@ function showVarCardSoon(name, rect, tab) {
 function hideVarCardSoon() {
   clearTimeout(varCard.showTimer);
   clearTimeout(varCard.hideTimer);
-  varCard.hideTimer = setTimeout(hideVarCard, 200);
+  varCard.hideTimer = setTimeout(hideVarCard, 400);
 }
 
 function hideVarCard() {
@@ -800,6 +857,7 @@ function hideVarCard() {
   if (varCard.el) varCard.el.remove();
   varCard.el = null;
   varCard.name = '';
+  varCard.anchor = null;
 }
 
 function showVarCard(name, rect, tab) {
@@ -837,7 +895,7 @@ function showVarCard(name, rect, tab) {
     actions.push(h('button', { class: 'btn', onclick: () => call('OpenSecretSource', name) }, 'Open in AWS'));
   }
   if (!fromSpec) {
-    actions.push(h('button', { class: 'btn', onclick: () => { hideVarCard(); openDrawer(name, !v); } }, v ? 'Edit' : 'Add'));
+    actions.unshift(h('button', { class: 'btn primary', onclick: () => openVariable(name) }, v ? 'Edit' : 'Add'));
   }
 
   const el = h('div', { class: 'var-card ' + st, role: 'dialog', 'aria-label': `{{${name}}}` },
@@ -849,13 +907,14 @@ function showVarCard(name, rect, tab) {
   document.body.append(el);
   varCard.el = el;
   varCard.name = name;
+  varCard.anchor = rect;
 
   const w = el.offsetWidth;
   const ht = el.offsetHeight;
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8));
-  const below = rect.bottom + 6;
+  const below = rect.bottom + 4;
   el.style.left = left + 'px';
-  el.style.top = (below + ht > window.innerHeight - 8 ? Math.max(8, rect.top - ht - 6) : below) + 'px';
+  el.style.top = (below + ht > window.innerHeight - 8 ? Math.max(8, rect.top - ht - 4) : below) + 'px';
 }
 
 // ---------- Rendering: response ----------
@@ -899,7 +958,13 @@ function renderResponse() {
   }, l, n ? h('span', { class: 'badge warn' }, String(n)) : (k === 'check' ? h('span', { class: 'badge' }, '✓') : null)))));
 
   if (tab.resTab === 'headers') {
-    el.append(h('div', { class: 'resbody' }, h('pre', {}, res.headers)));
+    const rows = String(res.headers || '').split('\n').filter((l) => l.includes(':')).map((l) => {
+      const i = l.indexOf(':');
+      return [l.slice(0, i), l.slice(i + 1).trim()];
+    });
+    el.append(h('div', { class: 'resbody' }, rows.length
+      ? h('table', { class: 'headers-view' }, h('tbody', {}, rows.map(([k, v]) => h('tr', {}, h('th', { scope: 'row' }, k), h('td', {}, v)))))
+      : h('p', { class: 'muted pad' }, 'No headers.')));
   } else if (tab.resTab === 'check') {
     el.append(res.issues.length
       ? h('div', { class: 'resbody' }, h('ul', { class: 'issues' }, res.issues.map((i) => h('li', {}, i))))
@@ -1043,6 +1108,14 @@ function openDrawer(focusName, create) {
   }
   renderDrawer();
   if (!create) $('varSearch').focus();
+}
+
+// openVariable opens the drawer on a variable's editor, or on a new one when it is not defined.
+function openVariable(name) {
+  hideVarCard();
+  const v = activeVars().get(name);
+  openDrawer(name, !v);
+  if (v) editVariable(v);
 }
 
 function closeDrawer() {

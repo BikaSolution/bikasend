@@ -154,8 +154,18 @@ button:disabled { opacity: .55; cursor: default; }
 .kv td { padding: 2px 4px; vertical-align: middle; }
 .kv td input[type=text], .kv td .field { width: 100%; }
 .kv .narrow { width: 28px; }
+.kv tr.off input[type=text], .kv tr.off .field { opacity: .5; }
+.headers-edit .hname-cell { width: 34%; }
+.headers-edit .hname-cell input { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; }
+.headers-view { width: 100%; border-collapse: collapse; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .95em; }
+.headers-view tr:nth-child(even) { background: var(--panel); }
+.headers-view th, .headers-view td { text-align: left; vertical-align: top; padding: 4px 10px; border-bottom: 1px solid var(--line); }
+.headers-view th { font-weight: 600; color: var(--accent); white-space: nowrap; width: 1%; }
+.headers-view td { color: var(--text); overflow-wrap: anywhere; user-select: text; }
+.pad { padding: 10px 12px; margin: 0; }
 .req-mark { color: var(--err); margin-left: 2px; }
 .row-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.row-actions .grow { flex: 1; min-width: 160px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; min-height: 22px; flex: none; }
 .chip { border-radius: 999px; padding: 1px 10px; font-size: .88em; border: 1px solid var(--line-strong); background: var(--raised); }
 .chip.ok { border-color: var(--ok); }
