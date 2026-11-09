@@ -160,9 +160,14 @@ deploy/site/         docker-compose: site + Cloudflare tunnel
 ## Releasing
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+make release                  # shows the last release and suggests the next version
+make release VERSION=v0.2.0
 ```
+
+It checks that you are on an up-to-date, clean `main` and that the version is new, runs vet and
+the tests, and asks before it pushes. It then sets the app's version in `wails.json` if needed
+(one commit), and pushes the tag. Tags are protected: once pushed, only an admin can move or
+delete one.
 
 [`release.yml`](.github/workflows/release.yml) builds macOS, Windows and Linux on native
 runners and publishes a GitHub release with generated notes. The download site picks it up

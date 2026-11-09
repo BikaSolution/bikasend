@@ -50,7 +50,7 @@ APIs, and the site hands out executables to users. A mistake in either is a brea
 | Fuzz the spec parsers | `make fuzz` |
 | Security scan | `make security` (latest govulncheck + gosec) |
 | Build app (this OS) | `make app` → `build/bikasend/bin/` |
-| Release | push a tag `vX.Y.Z` — CI builds all platforms (see Releases) |
+| Release | `make release VERSION=vX.Y.Z` — checks, asks, tags; CI builds all platforms (see Releases) |
 | Run download site | `make site` (<http://localhost:8091>; set `GITHUB_TOKEN` for a private repo) |
 | Quick public URL | `make tunnel` (needs `cloudflared`) |
 | Site + named tunnel | `TUNNEL_TOKEN=… GITHUB_TOKEN=… docker compose -f deploy/site/docker-compose.yml up -d --build` |
@@ -108,7 +108,8 @@ docs/threat-model.md             # Assets, trust boundaries, threats and mitigat
 
 ## Releases
 
-1. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+1. `make release VERSION=v0.2.0`: checks the branch, tree and version, runs vet and tests, asks,
+   bumps `productVersion` in `wails.json` if needed, then pushes the tag (UTC timestamps).
 2. `release.yml` creates the GitHub release with generated notes, builds on native macOS, Windows
    and Linux runners with the version and the site URL (repository variable `SITE_URL`) baked in,
    and uploads `Bikasend-<tag>-<platform>.zip` plus `Bikasend-<tag>-modules.txt`. When GitHub
