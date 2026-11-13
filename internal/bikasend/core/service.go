@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -39,6 +40,8 @@ type Options struct {
 	ConfigDir string // per-user folder for globals.json, settings.json, history.json
 	AWS       func(cliPath string) AWS
 	Client    *http.Client // for token and update calls
+	// DownloadDir receives verified updates; "" means the user's Downloads folder.
+	DownloadDir string
 }
 
 type sessionValue struct {
@@ -359,6 +362,12 @@ func (s *Service) SelectEnvironment(name string) (bikasend.Workspace, error) {
 	if name != "" && s.envConfig(name) == nil {
 		return s.workspace(), fmt.Errorf("%w: %q", bikasend.ErrUnknownEnv, name)
 	}
+	s.switchEnv(name)
+	return s.workspace(), nil
+}
+
+// switchEnv drops loaded secrets, so one environment's values never reach another's hosts.
+func (s *Service) switchEnv(name string) {
 	if name != s.env {
 		s.secrets = map[string]string{}
 		s.aws = bikasend.AWSStatus{State: "none"}
@@ -368,7 +377,76 @@ func (s *Service) SelectEnvironment(name string) (bikasend.Workspace, error) {
 		s.state.LastEnv[s.rootPath] = name
 		s.saveState()
 	}
+}
+
+func (s *Service) CreateEnvironment(name string) (bikasend.Workspace, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !namePattern.MatchString(name) {
+		return s.workspace(), fmt.Errorf("%w: environment name %q: use letters, digits, '.', '_' or '-'", bikasend.ErrInvalidConfig, name)
+	}
+	if s.envConfig(name) != nil {
+		return s.workspace(), fmt.Errorf("%w: environment %q already exists", bikasend.ErrInvalidConfig, name)
+	}
+	err := s.editFile(bikasend.ScopeFolder, func(c *configFile, _ *environment) {
+		envs := maps.Clone(c.Environments)
+		if envs == nil {
+			envs = map[string]environment{}
+		}
+		if _, ok := envs[name]; !ok {
+			envs[name] = environment{}
+		}
+		c.Environments = envs
+	})
+	if err != nil {
+		return s.workspace(), err
+	}
+	s.switchEnv(name)
 	return s.workspace(), nil
+}
+
+func (s *Service) DeleteEnvironment(name string) (bikasend.Workspace, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.envConfig(name) == nil {
+		return s.workspace(), fmt.Errorf("%w: %q", bikasend.ErrUnknownEnv, name)
+	}
+	err := s.editFile(bikasend.ScopeFolder, func(c *configFile, _ *environment) {
+		envs := maps.Clone(c.Environments)
+		delete(envs, name)
+		c.Environments = envs
+	})
+	if err != nil {
+		return s.workspace(), err
+	}
+	if s.env == name {
+		s.switchEnv(s.firstEnv())
+	}
+	return s.workspace(), nil
+}
+
+// SetHosts replaces the hosts list of the current environment: the hosts that may receive secrets.
+func (s *Service) SetHosts(hosts []string) (bikasend.Workspace, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(hosts) > maxHosts {
+		return s.workspace(), fmt.Errorf("%w: at most %d hosts per environment", bikasend.ErrInvalidConfig, maxHosts)
+	}
+	clean := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h == "" || slices.Contains(clean, h) {
+			continue
+		}
+		if !validHost(h) {
+			return s.workspace(), fmt.Errorf("%w: %q is not a host name; use api.example.com, *.example.com or localhost:8080", bikasend.ErrInvalidConfig, h)
+		}
+		clean = append(clean, h)
+	}
+	err := s.editFile(bikasend.ScopeEnvironment, func(_ *configFile, env *environment) {
+		env.Hosts = clean
+	})
+	return s.workspace(), err
 }
 
 // definitions returns the variable definitions of each file scope, narrowest first.

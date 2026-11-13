@@ -88,6 +88,18 @@ func (a *App) SelectEnvironment(name string) (bikasend.Workspace, error) {
 	return a.svc.SelectEnvironment(name)
 }
 
+func (a *App) CreateEnvironment(name string) (bikasend.Workspace, error) {
+	return a.svc.CreateEnvironment(name)
+}
+
+func (a *App) DeleteEnvironment(name string) (bikasend.Workspace, error) {
+	return a.svc.DeleteEnvironment(name)
+}
+
+func (a *App) SetHosts(hosts []string) (bikasend.Workspace, error) {
+	return a.svc.SetHosts(hosts)
+}
+
 func (a *App) SetVariable(scope, name string, in bikasend.VariableInput) (bikasend.Workspace, error) {
 	return a.svc.SetVariable(scope, name, in)
 }
@@ -157,8 +169,8 @@ func (a *App) SaveSettings(s bikasend.Settings) (bikasend.Workspace, error) {
 	return a.svc.SaveSettings(s)
 }
 
-func (a *App) Curl(r bikasend.Request) (string, error) {
-	return a.svc.Curl(r)
+func (a *App) Export(r bikasend.Request, format string) (string, error) {
+	return a.svc.Export(r, format)
 }
 
 func (a *App) ImportCurl(cmd string) (bikasend.Request, error) {
@@ -167,6 +179,10 @@ func (a *App) ImportCurl(cmd string) (bikasend.Request, error) {
 
 func (a *App) CheckUpdate() (bikasend.Update, error) {
 	return a.svc.CheckUpdate(a.ctx)
+}
+
+func (a *App) DownloadUpdate() (string, error) {
+	return a.svc.DownloadUpdate(a.ctx)
 }
 
 // SaveResponse writes a response body to a file the user picks. isBase64 marks a binary body.

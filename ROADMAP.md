@@ -8,8 +8,8 @@ Everything here follows the repo rules: **security first** (`10-security.md`), *
 third-party module** (`00-repo.md`), and **the existing repo layout**. When an
 item would break one of those, it says so.
 
-> **Status (9 Nov 2026):** everything in sections 1 and 2 is built, except Distribution, code
-> signing and the frontend smoke test (⏳). ✅ done · ◐ partly done · ⏳ not started.
+> **Status (9 Nov 2026):** everything in sections 1 and 2 is built, except Distribution and code
+> signing (⏳; paid certificates are out of scope). ✅ done · ◐ partly done · ⏳ not started.
 > The download site and README describe shipped features only (`90-website-audit.md`).
 
 ---
@@ -346,7 +346,8 @@ Update `10-security.md` with the new secret rules in the same change as M1.
 | ✅ Resizable panes, font size, theme toggle | Comfort on small and large screens | P2 | S | ✅ |
 | ✅ Command palette (`⌘K`) | Jump to an operation, environment or action | P2 | M | ✅ |
 | ✅ Recent folders | Switch between repos quickly | P1 | S | ✅ |
-| ✅ Update check | Compare with the site's latest tag, show "update available", verify SHA-256 | P2 | S | ✅ |
+| ✅ Update check and download | Compare with the site's latest tag; download this platform's build and verify its SHA-256 before saving | P2 | S | ✅ |
+| ✅ Environment and hosts editor | Create and delete environments, edit hosts, "Always allow" from the send dialog | P1 | M | ✅ |
 | ✅ Empty and error states with next steps | "No swagger files found: is this the repo root?" | P1 | S | ✅ |
 | ✅ Secret hover card | See where a `{{secret}}` comes from, reveal it, jump to it in AWS | P2 | M | ✅ |
 | ✅ Create the config file automatically | No "Create .bika.json" step before the first shared variable | P2 | S | ✅ |
@@ -392,7 +393,7 @@ is simply dropped. The site, README, rules and threat model change with it.
 | ✅ `golangci-lint` config with depguard boundaries | Enforce the import boundaries | P2 | S | ✅ (dev tool) |
 | ✅ `go-arch-lint` config | Enforce the `cmd` / `internal` / `pkg/sdk` layering | P2 | S | ✅ (dev tool) |
 | ✅ Pre-commit hooks | Lint, arch lint, tests before every commit | P2 | S | ✅ (dev tool) |
-| ⏳ Frontend smoke test | Load `index.html` in a headless webview or browser and click through scan → send | P3 | M | ⚠️ (test-only tool) |
+| ✅ Frontend smoke test | `TestUI` drives the real UI and core in headless Chrome: open, hover, edit, send, environments. A stdlib DevTools client, no browser modules | P3 | M | ✅ |
 | ✅ Pin `cloudflared` image to a digest | Same supply-chain rule as Actions | P1 | S | ✅ |
 
 ### Download site

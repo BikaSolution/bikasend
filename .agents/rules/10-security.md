@@ -39,6 +39,19 @@ that crosses a boundary updates it in the same PR.
   URL, which needs one); with no list, only loopback or a host the user confirms on that send; no
   secret over plain http without a confirmation; no redirect with a secret to another host or from
   https to http; loaded secrets are masked and redacted raw and URL-escaped. Do not weaken any of them.
+- **The update download trusts nothing it reads.** `DownloadUpdate` fetches only from the update
+  site baked into the build, follows redirects only to that site and GitHub hosts, refuses a
+  version that is not newer and a name that does not match the tag, checks the SHA-256 from
+  `latest.json`, caps the size and saves with `os.Link`, which never overwrites a file. It never
+  runs or opens the download. The hash proves what the update site published, nothing more.
+- **Hosts lists change only on an explicit click** ("Always allow" when there is no list, or the
+  environment editor). A host outside a non-empty list is refused; the send dialog only offers to
+  open the editor, never to send. Show hosts as Go parsed them (`Preview.Host`).
+- **Exports are pasted into shells.** `Export` quotes every piece for its language (POSIX single
+  quotes, PowerShell single quotes with every curly quote doubled, JSON strings for JavaScript and
+  Python), the method included, and turns secrets into `BIKASEND_` environment variables. It
+  refuses rather than risks: a secret in any form, control or bidi characters, values HTTPie would
+  read as files. curl text fields use `--form-string`, and URLs `--globoff`.
 - **Uploads come from the file dialog only.** A spec, cURL import or history entry never chooses a
   local file. `addFile` accepts only paths recorded by `PickFile` in this session.
 - **The aws CLI is called without a shell.** Every ID, profile and region matches a pattern that

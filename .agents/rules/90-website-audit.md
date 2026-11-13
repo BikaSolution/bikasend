@@ -39,7 +39,9 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | AWS Secrets Manager and Parameter Store through the user's `aws` CLI | Features, FAQ | `pkg/awscli`; `LoadSecrets` in `core/http.go` |
 | Secrets only to listed hosts, not over plain http, not along cross-host redirects | Features | `guard` and `CheckRedirect` in `core/http.go` |
 | Refuses secret-looking values in `.bika.json` | FAQ | `guardFileValue` in `core/variables.go` |
-| JSON tree, search, timing, images, spec check, cURL without secrets | Features | `app.js` `renderBody`; `core/validate.go`; `core/curl.go` |
+| JSON tree, search, timing, images, spec check; copy as cURL, PowerShell, HTTPie, JavaScript or Python without secrets | Features | `app.js` `renderBody`; `core/validate.go`; `exporters` in `core/curl.go` |
+| Environments and hosts editor, "Always allow" for a host | README | `envPanel`, `send` in `app.js`; `CreateEnvironment`, `SetHosts` in `core/service.go` |
+| Update download, SHA-256 checked before saving | README | `DownloadUpdate` in `core/history.go` |
 | The hero screenshot shows the current app | Hero | `static/app.webp`: retake it (generic example repo) when the UI changes |
 | Bodies pre-filled from examples, enums, defaults | Features | `example` in `core/swagger.go` |
 | Path, query, header params and auth headers set up | Features | `buildOperation` in `core/swagger.go` |

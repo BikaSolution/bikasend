@@ -108,6 +108,8 @@ type Preview struct {
 	Error     string   `json:"error"`
 	Insecure  bool     `json:"insecure"`
 	BlockedBy string   `json:"blockedBy"`
+	// Host is the request's host as Go parsed it; dialogs show this, never text cut from the URL.
+	Host string `json:"host"`
 }
 
 const (
