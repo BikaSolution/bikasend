@@ -3,29 +3,104 @@ package core
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/BikaSolution/bikasend/pkg/sdk/bikasend"
 )
 
-func TestCurl(t *testing.T) {
+func TestExport(t *testing.T) {
 	s, _ := newTestService(t, "https://api.example.com", testConfig, nil)
-	if _, err := s.SetVariable(bikasend.ScopeSession, "api_key", bikasend.VariableInput{Kind: bikasend.KindSecret, Value: "k'123456"}); err != nil {
-		t.Fatal(err)
+	set := func(name, value string) {
+		t.Helper()
+		if _, err := s.SetVariable(bikasend.ScopeSession, name, bikasend.VariableInput{Kind: bikasend.KindSecret, Value: value}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	got, err := s.Curl(bikasend.Request{
+	set("api_key", "k'123456")
+	req := bikasend.Request{
 		Method: "POST", URL: "https://api.example.com/items?x={{api_key}}",
 		Headers: "X-API-Key: {{api_key}}", BodyType: "json", Body: `{"a":"it's"}`,
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
-	want := "# Set first: API_KEY\ncurl \\\n  -X \\\n  POST \\\n  'https://api.example.com/items?x='\"$API_KEY\" \\\n  -H \\\n  'X-Api-Key: '\"$API_KEY\" \\\n  --data-raw \\\n  '{\"a\":\"it'\\''s\"}'"
-	if got != want {
-		t.Errorf("curl =\n%s\nwant\n%s", got, want)
+	tests := []struct {
+		format string
+		want   string
+		has    []string
+	}{
+		{format: "curl", want: "# Set first: BIKASEND_API_KEY\ncurl --globoff -X 'POST' 'https://api.example.com/items?x='\"$BIKASEND_API_KEY\" \\\n  -H 'X-Api-Key: '\"$BIKASEND_API_KEY\" \\\n  --data-raw '{\"a\":\"it'\\''s\"}'"},
+		{format: "powershell", want: "# Set first: $env:BIKASEND_API_KEY\n$headers = @{\n  'X-Api-Key' = $env:BIKASEND_API_KEY\n}\n$body = '{\"a\":\"it''s\"}'\nInvoke-RestMethod -Method 'POST' -Uri ('https://api.example.com/items?x=' + $env:BIKASEND_API_KEY) -Headers $headers -Body $body"},
+		{format: "httpie", has: []string{"http --ignore-stdin 'POST' 'https://api.example.com/items?x='\"$BIKASEND_API_KEY\"", "'X-Api-Key:'\"$BIKASEND_API_KEY\"", "--raw '{\"a\":\"it'\\''s\"}'"}},
+		{format: "fetch", has: []string{`fetch("https://api.example.com/items?x=" + process.env.BIKASEND_API_KEY, {`, `"X-Api-Key": process.env.BIKASEND_API_KEY,`, `body: "{\"a\":\"it's\"}",`}},
+		{format: "python", has: []string{"import os", `"https://api.example.com/items?x=" + os.environ["BIKASEND_API_KEY"],`, `"X-Api-Key": os.environ["BIKASEND_API_KEY"],`, `data="{\"a\":\"it's\"}",`}},
 	}
-	if _, err := s.Curl(bikasend.Request{Method: "GET", URL: "{{missing}}/x"}); err == nil {
-		t.Error("curl with a missing variable must fail")
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			got, err := s.Export(req, tt.format)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.want != "" && got != tt.want {
+				t.Errorf("got\n%s\nwant\n%s", got, tt.want)
+			}
+			for _, h := range tt.has {
+				if !strings.Contains(got, h) {
+					t.Errorf("missing %q in\n%s", h, got)
+				}
+			}
+			if strings.Contains(got, "123456") {
+				t.Errorf("the secret value leaked into the export:\n%s", got)
+			}
+		})
+	}
+
+	// Values come from specs, cURL imports and history: quoting must hold against all of them.
+	hostile := bikasend.Request{Method: "get&id", URL: "https://api.example.com/x?[1-9]", Headers: "X-Note: it\u2019s $(id) `id`"}
+	if got, _ := s.Export(hostile, "curl"); !strings.Contains(got, "curl --globoff -X 'GET&ID'") || !strings.Contains(got, "'X-Note: it\u2019s $(id) `id`'") {
+		t.Errorf("curl quoting:\n%s", got)
+	}
+	if got, _ := s.Export(hostile, "powershell"); !strings.Contains(got, "'it\u2019\u2019s $(id) `id`'") || !strings.Contains(got, "-Method 'GET&ID'") {
+		t.Errorf("powershell must double curly quotes too:\n%s", got)
+	}
+
+	// A spec example such as @.env must never become "upload this local file".
+	atFile := bikasend.Request{Method: "POST", URL: "https://api.example.com/up", Headers: "X-Doc: @.env", BodyType: "multipart",
+		Form: []bikasend.Field{{Name: "doc", Value: "@.env", Enabled: true}}}
+	if got, err := s.Export(atFile, "curl"); err != nil || !strings.Contains(got, "--form-string 'doc=@.env'") || strings.Contains(got, "-F 'doc=") {
+		t.Errorf("curl text fields must use --form-string:\n%s, %v", got, err)
+	}
+	if _, err := s.Export(atFile, "httpie"); !errors.Is(err, bikasend.ErrInvalidRequest) {
+		t.Errorf("httpie would read @.env as a file: %v", err)
+	}
+
+	refused := []struct {
+		name   string
+		r      bikasend.Request
+		format string
+	}{
+		{name: "a URL-escaped secret in a form body", r: bikasend.Request{Method: "POST", URL: "https://api.example.com/f", BodyType: "form", Form: []bikasend.Field{{Name: "token", Value: "{{slashy}}", Enabled: true}}}, format: "curl"},
+		{name: "a secret too short to replace", r: bikasend.Request{Method: "GET", URL: "https://api.example.com/{{pin}}"}, format: "python"},
+		{name: "an escape character in a header", r: bikasend.Request{Method: "GET", URL: "https://api.example.com/", Headers: "X-A: a\x1b[201~b"}, format: "curl"},
+		{name: "a bidi override", r: bikasend.Request{Method: "GET", URL: "https://api.example.com/", Headers: "X-A: a\u202eb"}, format: "fetch"},
+		{name: "an invalid header name", r: bikasend.Request{Method: "GET", URL: "https://api.example.com/", Headers: "Bad Name: x"}, format: "curl"},
+		{name: "an unknown format", r: req, format: "bash; rm"},
+	}
+	set("slashy", "a+b/c=d")
+	set("pin", "12")
+	for _, tt := range refused {
+		if got, err := s.Export(tt.r, tt.format); !errors.Is(err, bikasend.ErrInvalidRequest) {
+			t.Errorf("%s: want a refusal, got %q, %v", tt.name, got, err)
+		}
+	}
+	if got, _ := s.Export(bikasend.Request{Method: "POST", URL: "https://api.example.com/", BodyType: "text", Body: "a\u2028b"}, "fetch"); !strings.Contains(got, `"a\u2028b"`) {
+		t.Errorf("fetch must escape U+2028:\n%s", got)
+	}
+
+	set("api-key", "other-value")
+	if got, err := s.Export(bikasend.Request{Method: "GET", URL: "https://api.example.com/?a={{api_key}}&b={{api-key}}"}, "curl"); err != nil || !strings.Contains(got, "BIKASEND_API_KEY_2") {
+		t.Errorf("two names that collapse to one variable need a suffix:\n%s, %v", got, err)
+	}
+	if _, err := s.Export(bikasend.Request{Method: "GET", URL: "{{missing}}/x"}, "curl"); err == nil {
+		t.Error("export with a missing variable must fail")
 	}
 }
 

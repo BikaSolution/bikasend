@@ -524,6 +524,22 @@ func TestUI(t *testing.T) {
 	waitFor("the operation is listed", `!!document.querySelector('button.op')`)
 	must("open the operation", d.eval(`document.querySelector('button.op').click()`, nil))
 
+	// Text size: Ctrl + = grows it and saves the setting; Ctrl + 0 resets it.
+	key := func(step, k, code string, vk int) {
+		t.Helper()
+		call(step, "Input.dispatchKeyEvent", map[string]any{"type": "keyDown", "key": k, "code": code, "windowsVirtualKeyCode": vk, "modifiers": 2})
+		call(step, "Input.dispatchKeyEvent", map[string]any{"type": "keyUp", "key": k, "code": code, "windowsVirtualKeyCode": vk, "modifiers": 2})
+	}
+	key("grow the text", "=", "Equal", 187)
+	waitFor("the text grows", `getComputedStyle(document.documentElement).getPropertyValue('--fs').trim() === '14px'`)
+	if got := svc.Workspace().Settings.FontSize; got != 14 {
+		t.Errorf("saved font size = %d, want 14", got)
+	}
+	key("reset the text", "0", "Digit0", 48)
+	waitFor("the text resets", `getComputedStyle(document.documentElement).getPropertyValue('--fs').trim() === '13px'`)
+
+	waitFor("Copy as offers every format", `[...document.querySelectorAll('#request select.export option')].map((o) => o.value).join() === ',curl,powershell,httpie,fetch,python'`)
+
 	var url string
 	must("read the URL", d.eval(`document.querySelector('#request input.url').value`, &url))
 	if url != "{{baseUrl}}/items" {

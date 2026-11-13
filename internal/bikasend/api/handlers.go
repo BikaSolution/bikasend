@@ -169,8 +169,8 @@ func (a *App) SaveSettings(s bikasend.Settings) (bikasend.Workspace, error) {
 	return a.svc.SaveSettings(s)
 }
 
-func (a *App) Curl(r bikasend.Request) (string, error) {
-	return a.svc.Curl(r)
+func (a *App) Export(r bikasend.Request, format string) (string, error) {
+	return a.svc.Export(r, format)
 }
 
 func (a *App) ImportCurl(cmd string) (bikasend.Request, error) {

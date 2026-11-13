@@ -47,6 +47,11 @@ that crosses a boundary updates it in the same PR.
 - **Hosts lists change only on an explicit click** ("Always allow" when there is no list, or the
   environment editor). A host outside a non-empty list is refused; the send dialog only offers to
   open the editor, never to send. Show hosts as Go parsed them (`Preview.Host`).
+- **Exports are pasted into shells.** `Export` quotes every piece for its language (POSIX single
+  quotes, PowerShell single quotes with every curly quote doubled, JSON strings for JavaScript and
+  Python), the method included, and turns secrets into `BIKASEND_` environment variables. It
+  refuses rather than risks: a secret in any form, control or bidi characters, values HTTPie would
+  read as files. curl text fields use `--form-string`, and URLs `--globoff`.
 - **Uploads come from the file dialog only.** A spec, cURL import or history entry never chooses a
   local file. `addFile` accepts only paths recorded by `PickFile` in this session.
 - **The aws CLI is called without a shell.** Every ID, profile and region matches a pattern that

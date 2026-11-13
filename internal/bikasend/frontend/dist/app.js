@@ -646,7 +646,7 @@ function renderRequest() {
     METHODS.map((m) => h('option', { value: m, selected: m === r.method }, m)));
   const url = varField({ value: r.url, label: 'URL', placeholder: 'https://…', tab, className: 'url', onInput: (v) => { r.url = v; renderTabs(); } });
   const sendBtn = h('button', { id: 'sendBtn', class: 'btn primary', title: `Send (${MOD}Enter)`, onclick: () => send(tab) }, 'Send');
-  el.append(h('div', { class: 'urlbar' }, method, url, sendBtn));
+  el.append(h('div', { class: 'urlbar' }, method, url, sendBtn, exportSelect()));
   renderRequestButton();
 
   if (op && (op.deprecated || op.summary)) {
@@ -1092,7 +1092,6 @@ function renderResponse() {
     res.redacted ? h('span', { class: 'badge', title: 'A loaded secret appeared in the response and was hidden.' }, 'secret redacted') : null,
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn', onclick: () => call('CopyText', res.body || '').then(() => toast('Body copied')) , disabled: !res.body }, 'Copy'),
-    h('button', { class: 'btn', onclick: copyCurl }, 'Copy as cURL'),
     h('button', { class: 'btn', onclick: () => call('SaveResponse', saveName(tab, res), res.bodyBase64 || res.body, !!res.bodyBase64) }, 'Save…')));
 
   const tabs = [['body', 'Body'], ['headers', 'Headers']];
@@ -1218,12 +1217,22 @@ function jsonTree(value) {
   return h('div', { class: 'tree' }, node(null, value, 0));
 }
 
-async function copyCurl() {
+const EXPORTS = [['curl', 'cURL'], ['powershell', 'PowerShell'], ['httpie', 'HTTPie'], ['fetch', 'JavaScript fetch'], ['python', 'Python requests']];
+
+// copyAs asks Go for the request in another language; secrets come back as environment variables.
+async function copyAs(format) {
   const tab = activeTab();
   if (!tab) return;
-  const cmd = await call('Curl', wireRequest(tab));
-  await call('CopyText', cmd);
-  toast(/Set first/.test(cmd) ? 'cURL copied. Secrets are $ENV references.' : 'cURL copied');
+  const text = await call('Export', wireRequest(tab), format);
+  await call('CopyText', text);
+  const label = (EXPORTS.find(([k]) => k === format) || [])[1] || format;
+  toast(/Set first/.test(text) ? `${label} copied. Secrets are environment variables: set them first.` : `${label} copied`);
+}
+
+function exportSelect() {
+  return h('select', { class: 'export', 'aria-label': 'Copy the request as code', title: 'Copy the request as a command or code',
+    onchange: (e) => { const f = e.target.value; e.target.value = ''; if (f) copyAs(f); } },
+  h('option', { value: '' }, 'Copy as…'), EXPORTS.map(([k, l]) => h('option', { value: k }, l)));
 }
 
 // ---------- Welcome ----------
@@ -1236,7 +1245,7 @@ function welcome() {
     h('button', { class: 'btn primary', onclick: pickFolder }, 'Open folder…'),
     state.ws && state.ws.root ? h('p', {}, h('button', { class: 'link', onclick: () => newTab() }, 'Start a blank request')) : null,
     recent.length ? h('div', { class: 'recent-list' }, h('p', { class: 'muted' }, 'Recent'), recent.map((p) => h('button', { class: 'btn', title: p, onclick: () => openFolder(p) }, basename(p) + ' — ' + p))) : null,
-    h('p', { class: 'muted small' }, `${MOD}K commands · ${MOD}E variables · ${MOD}Enter send · hover a {{variable}} to see its source, ${isMac ? '⌘' : 'Ctrl'}-click to edit it`));
+    h('p', { class: 'muted small' }, `${MOD}K commands · ${MOD}E variables · ${MOD}Enter send · ${MOD}+ / ${MOD}− text size · hover a {{variable}} to see its source, ${isMac ? '⌘' : 'Ctrl'}-click to edit it`));
 }
 
 // ---------- Variables drawer ----------
@@ -1638,7 +1647,7 @@ function paletteDialog() {
     { label: 'New tab', hint: MOD + 'T', run: () => newTab() },
     { label: 'Close tab', run: () => state.active && closeTab(state.active) },
     { label: 'Import cURL…', run: importDialog },
-    { label: 'Copy as cURL', run: copyCurl, hidden: !activeTab() },
+    ...EXPORTS.map(([k, l]) => ({ label: 'Copy as ' + l, run: () => copyAs(k), hidden: !activeTab() })),
     { label: 'Load AWS secrets', run: () => loadSecrets(true), hidden: !needsAWS() },
     { label: 'Forget AWS secrets and tokens', run: forget, hidden: !needsAWS() },
     { label: 'Clear history', run: async () => { await call('ClearHistory'); state.history = []; renderSide(); } },
@@ -1722,15 +1731,23 @@ function resizer(handle, apply, key, vertical) {
   const saved = Number(store.get(key));
   if (saved) apply(saved);
   handle.addEventListener('pointerdown', (e) => {
+    // Without this the drag starts a text selection across the panes.
+    e.preventDefault();
+    const sel = window.getSelection();
+    if (sel) sel.removeAllRanges();
+    document.body.classList.add('resizing', vertical ? 'resizing-v' : 'resizing-h');
     handle.setPointerCapture(e.pointerId);
     const move = (ev) => apply(vertical ? ev.clientY - $('main').getBoundingClientRect().top - 30 : ev.clientX);
     const up = () => {
+      document.body.classList.remove('resizing', 'resizing-v', 'resizing-h');
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
       store.set(key, vertical ? parseInt(getComputedStyle($('main')).getPropertyValue('--req-h'), 10) : parseInt(getComputedStyle($('layout')).getPropertyValue('--side-w'), 10));
     };
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
   });
   handle.addEventListener('keydown', (e) => {
     const cur = vertical ? $('request').getBoundingClientRect().height : $('side').getBoundingClientRect().width;
@@ -1770,6 +1787,9 @@ function wire() {
     else if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); paletteDialog(); }
     else if (mod && e.key.toLowerCase() === 'e') { e.preventDefault(); $('drawer').classList.contains('open') ? closeDrawer() : openDrawer(); }
     else if (mod && e.key.toLowerCase() === 't') { e.preventDefault(); newTab(); }
+    else if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomText(1); }
+    else if (mod && (e.key === '-' || e.key === '_')) { e.preventDefault(); zoomText(-1); }
+    else if (mod && e.key === '0') { e.preventDefault(); zoomText(0); }
     else if (mod && e.key.toLowerCase() === 'f' && $('findBox')) { e.preventDefault(); $('findBox').focus(); }
     else if (e.key === 'Escape' && varCard.el) hideVarCard();
     else if (e.key === 'Escape' && $('drawer').classList.contains('open') && !$('dialog').open) closeDrawer();
@@ -1785,6 +1805,16 @@ function wire() {
       }
     });
   }
+}
+
+// zoomText changes the saved text size: +1, -1, or 0 to reset. The whole UI scales with it.
+async function zoomText(step) {
+  const s = { ...state.ws.settings };
+  const size = step === 0 ? 13 : Math.max(10, Math.min(20, (s.fontSize || 13) + step));
+  if (size === s.fontSize) return;
+  s.fontSize = size;
+  applyWS(await call('SaveSettings', s));
+  toast(`Text size ${size}px`);
 }
 
 async function start() {

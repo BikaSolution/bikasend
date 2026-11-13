@@ -38,7 +38,8 @@ type Service interface {
 	ClearHistory() error
 	SaveSettings(s Settings) (Workspace, error)
 
-	Curl(r Request) (string, error)
+	// Export writes the request as curl, httpie, powershell, fetch or python; secrets become env references.
+	Export(r Request, format string) (string, error)
 	ImportCurl(cmd string) (Request, error)
 	CheckUpdate(ctx context.Context) (Update, error)
 	// DownloadUpdate saves this platform's newest build after checking its SHA-256; it returns the path.

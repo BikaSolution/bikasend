@@ -181,7 +181,7 @@ button:disabled { opacity: .55; cursor: default; }
 .chip.missing { border-color: var(--err); color: var(--err); }
 .docs h3 { margin: 6px 0 4px; font-size: 1em; }
 .docs p { margin: 0 0 6px; color: var(--soft); white-space: pre-wrap; }
-.docs pre { max-height: 220px; }
+.docs pre { max-height: none; overflow: visible; }
 
 /* Response */
 .status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: none; }
@@ -280,3 +280,7 @@ mark.find.current { background: #f97316; }
 .toast.err { background: var(--err); color: #fff; }
 
 @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+body.resizing, body.resizing * { user-select: none !important; }
+body.resizing-h, body.resizing-h * { cursor: col-resize !important; }
+body.resizing-v, body.resizing-v * { cursor: row-resize !important; }
+.urlbar select.export { flex: none; width: auto; font-weight: 400; }

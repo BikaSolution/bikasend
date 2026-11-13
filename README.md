@@ -51,8 +51,9 @@ don't use.
 - **Auth helpers.** OAuth2 client credentials and AWS SigV4 signing per environment.
 - **Responses that explain themselves.** JSON tree, search, timing breakdown, image preview, and
   a check against the spec's response schema.
-- **History, tabs, command palette (`⌘K`), cURL import and export** (secrets become `$ENV`
-  references).
+- **History, tabs, command palette (`⌘K`), cURL import.** Copy any request as cURL, PowerShell,
+  HTTPie, JavaScript `fetch` or Python `requests`; secrets become environment variable references.
+  `⌘ +` / `⌘ −` (`Ctrl` on Windows and Linux) change the text size.
 - **Updates you can trust.** When a new version is out, Bikasend downloads it for your platform and
   checks its SHA-256 against the release before it saves the file.
 - **Secrets stay in memory.** Never written to disk, logs or the web view. Blocked from hosts an
