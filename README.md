@@ -133,22 +133,22 @@ inside the app are checked against two SHA-256 hashes first (see above).
 ## Development
 
 ```sh
-brew install go
+brew install go just
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
 wails doctor
 ```
 
 | Task | Command |
 | --- | --- |
-| Run the app | `make run` |
-| Run the app with live reload | `make dev` |
-| Test | `make test` |
-| Vet, lint, architecture rules | `make vet`, `make lint`, `make arch_lint` |
-| Fuzz the spec parsers | `make fuzz` |
-| Security scan (govulncheck + gosec) | `make security` |
-| Build the app for this OS | `make app` → `build/bikasend/bin/` |
-| Run the download site | `make site` → <http://localhost:8091> |
-| Quick public URL for the site | `make tunnel` |
+| Run the app | `just run` |
+| Run the app with live reload | `just dev` |
+| Test | `just test` |
+| Vet, lint, architecture rules | `just vet`, `just lint`, `just arch_lint` |
+| Fuzz the spec parsers | `just fuzz` |
+| Security scan (govulncheck + gosec) | `just security` |
+| Build the app for this OS | `just app` → `build/bikasend/bin/` |
+| Run the download site | `just site` → <http://localhost:8091> |
+| Quick public URL for the site | `just tunnel` |
 
 The only third-party Go module is Wails. Everything else is the standard library: no npm, no
 frontend framework, no CDN.
@@ -174,8 +174,8 @@ deploy/site/         docker-compose: site + Cloudflare tunnel
 ## Releasing
 
 ```sh
-make release                  # shows the last release and suggests the next version
-make release VERSION=v0.2.0
+just release                  # shows the last release and suggests the next versions
+just release v0.2.0
 ```
 
 It checks that you are on an up-to-date, clean `main` and that the version is new, runs vet and
@@ -227,7 +227,7 @@ Security comes first in this repo. Read [`10-security.md`](.agents/rules/10-secu
 you change anything. In short:
 
 - read the [threat model](docs/threat-model.md) before you change a trust boundary,
-- run `make security` and the `security-auditor` agent before every PR; CI scans every PR and a
+- run `just security` and the `security-auditor` agent before every PR; CI scans every PR and a
   monthly audit opens an issue when something new turns up,
 - secrets live in memory or in environment variables, never in files or logs,
 - untrusted text (Swagger files, responses, release notes) is always rendered as text,

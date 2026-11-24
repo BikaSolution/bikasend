@@ -48,7 +48,7 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Path, query, header params and auth headers set up | Features | `operation` in `core/swagger.go` |
 | Secrets stay in memory, never on disk or in logs | Features | `store` in `app.js` (no secrets); `scrubRequest` in `core/history.go`; `10-security.md` |
 | No CORS: requests run natively | Features | `Send` in `core/http.go` |
-| About 10 MB, offline, no account, no telemetry; the only own call is the update check | Features, README | `make app` output size; `api()` calls in `app.js`; `CheckUpdate`, `latestRelease` in `core/history.go` |
+| About 10 MB, offline, no account, no telemetry; the only own call is the update check | Features, README | `just app` output size; `api()` calls in `app.js`; `CheckUpdate`, `latestRelease` in `core/history.go` |
 | Remembers the folder; base URL per spec | How it works | `store` keys `server:`, `spec:` in `app.js`; `Recent` in `core/service.go` |
 | Filter by path or summary, toggle methods, paste a URL | How it works | `renderOps`, `pathMatches` and the method filter in `renderSide` (`app.js`) |
 | `⌘ Enter` / `Ctrl Enter` sends; status, time, size, headers, pretty JSON | How it works | the `keydown` handler in `wire` and `send` in `app.js`; `Send` in `core/http.go` |

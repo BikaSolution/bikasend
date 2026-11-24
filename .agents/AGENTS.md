@@ -22,7 +22,7 @@ APIs, and the site hands out executables to users. A mistake in either is a brea
   here, what secret passes through, what can an attacker reach? Write the answer in the PR.
 - **Run a security audit often**: before every PR, after every dependency change, after any change
   to `internal/site`, `pkg/httpserve`, `deploy/` or `build/`, and at least once a month. Use the
-  `security-auditor` agent (`.agents/agents/security-auditor.md`) and `make security`.
+  `security-auditor` agent (`.agents/agents/security-auditor.md`) and `just security`.
 - **Fix or escalate.** A security finding is never "later". Fix it in the same change, or stop and
   tell the human.
 - The full rules are in `10-security.md`. They override every other rule.
@@ -43,22 +43,22 @@ APIs, and the site hands out executables to users. A mistake in either is a brea
 
 | Action | Command |
 | --- | --- |
-| Run the app (built, like an install) | `make run` |
-| Run the app (dev, live reload) | `make dev` (browser view at <http://localhost:34115>) |
-| Test | `make test` |
-| Vet / lint / architecture rules | `make vet` · `make lint` · `make arch_lint` |
-| Fuzz the spec parsers | `make fuzz` |
-| Security scan | `make security` (latest govulncheck + gosec) |
-| Build app (this OS) | `make app` → `build/bikasend/bin/` |
-| Release | `make release VERSION=vX.Y.Z` — checks, asks, tags; CI builds all platforms (see Releases) |
-| Run download site | `make site` (<http://localhost:8091>; set `GITHUB_TOKEN` for a private repo) |
-| Quick public URL | `make tunnel` (needs `cloudflared`) |
+| Run the app (built, like an install) | `just run` |
+| Run the app (dev, live reload) | `just dev` (browser view at <http://localhost:34115>) |
+| Test | `just test` |
+| Vet / lint / architecture rules | `just vet` · `just lint` · `just arch_lint` |
+| Fuzz the spec parsers | `just fuzz` |
+| Security scan | `just security` (latest govulncheck + gosec) |
+| Build app (this OS) | `just app` → `build/bikasend/bin/` |
+| Release | `just release vX.Y.Z` — checks, asks, tags; CI builds all platforms (see Releases) |
+| Run download site | `just site` (<http://localhost:8091>; set `GITHUB_TOKEN` for a private repo) |
+| Quick public URL | `just tunnel` (needs `cloudflared`) |
 | Site + named tunnel | `TUNNEL_TOKEN=… GITHUB_TOKEN=… docker compose -f deploy/site/docker-compose.yml up -d --build` |
 
 ## Setup
 
 ```sh
-brew install go golangci-lint
+brew install go golangci-lint just
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
 wails doctor                 # checks the platform webview deps
 pip install pre-commit && pre-commit install
@@ -120,7 +120,7 @@ Pick the version by what changed since the last tag:
   or account, dropping a platform, or removing a feature people rely on. Ask the human before a
   major bump.
 
-1. `make release VERSION=v0.2.0`: checks the branch, tree and version, runs vet and tests, asks,
+1. `just release v0.2.0`: checks the branch, tree and version, runs vet and tests, asks,
    bumps `productVersion` in `wails.json` if needed, then pushes the tag (UTC timestamps).
 2. `release.yml` creates the GitHub release with generated notes, builds on native macOS, Windows
    and Linux runners with the version and the site URL (repository variable `SITE_URL`) baked in,
@@ -189,7 +189,7 @@ them into plain files, check they match their target, then restore the links. On
 The developer's machine runs their editor too. A runaway command can take it down.
 
 - Never run `go test -fuzz` with default parallelism: Go starts one worker per CPU. Use
-  `make fuzz` (2 workers, heap target, a 3 GB cgroup on Linux) or copy its flags.
+  `just fuzz` (2 workers, heap target, a 3 GB cgroup on Linux) or copy its flags.
 - On Linux, run long or heavy commands (fuzz, `wails build`, scanners, a new parser on big input)
   in their own cgroup, so an overflow kills only that command:
   `systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 <command>`.

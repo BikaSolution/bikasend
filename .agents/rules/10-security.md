@@ -124,7 +124,7 @@ that crosses a boundary updates it in the same PR.
 - Workflows start with `permissions: {}` and grant the least each job needs.
 - Pass `${{ }}` values to `run:` through `env:`, never inline. Tag names are user input.
 - `actions/checkout` with `persist-credentials: false`. No shared Go cache in release builds.
-- Pin tool versions (`wails@v2.17.1`), never `@latest`, in CI. `make security` is the exception: a
+- Pin tool versions (`wails@v2.17.1`), never `@latest`, in CI. `just security` is the exception: a
   scanner must be current.
 - Dependabot (`.github/dependabot.yml`) watches Go modules, Actions and the Docker base image.
   Merge its security PRs first.
@@ -145,7 +145,7 @@ Run an audit:
 
 An audit is:
 
-1. `make security` — `govulncheck` (known CVEs in deps and stdlib) and `gosec` (insecure patterns).
+1. `just security` — `govulncheck` (known CVEs in deps and stdlib) and `gosec` (insecure patterns).
    Fix every finding, or record why it does not apply with a `#nosec` comment that names the reason.
 2. The `security-auditor` agent (`.agents/agents/security-auditor.md`) over the diff, or over the
    whole repo for the monthly audit.

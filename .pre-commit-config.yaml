@@ -23,7 +23,7 @@ repos:
         pass_filenames: false
       - id: go-arch-lint
         name: Architecture boundaries (go-arch-lint)
-        entry: make arch_lint
+        entry: just arch_lint
         language: system
         files: '(\.go$|^\.go-arch-lint\.yml$)'
         pass_filenames: false

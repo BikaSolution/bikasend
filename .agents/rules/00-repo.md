@@ -62,4 +62,4 @@ pkg/                       # Shared packages
 - Build paths with `filepath`, never with `/` string joins.
 - No OS-specific code outside what Wails wraps. If you must, use a build-tagged file.
 - Release builds run in CI on native macOS, Windows and Linux runners (`release.yml`). Locally,
-  `make app` builds for this OS.
+  `just app` builds for this OS.

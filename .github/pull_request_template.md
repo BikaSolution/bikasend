@@ -9,7 +9,7 @@ Add more detail *here* about the release
 ## Security
 
 What input is untrusted, what secret passes through, what can an attacker reach? Paste the
-`make security` result and the `security-auditor` summary.
+`just security` result and the `security-auditor` summary.
 
 ## Website
 

@@ -20,8 +20,8 @@
   skips without Chrome (`BIKASEND_CHROME` sets the path); CI's Ubuntu runner has one. Extend it
   when a UI flow changes.
 - Parsers of untrusted input have a fuzz test with seeds inline (`FuzzParseJSON`, `FuzzParseYAML`).
-  Run `make fuzz` after changing them; CI runs each for 30s. Never fuzz with default parallelism
-  (one worker per CPU); use `make fuzz` or its `-parallel 2` and memory caps.
+  Run `just fuzz` after changing them; CI runs each for 30s. Never fuzz with default parallelism
+  (one worker per CPU); use `just fuzz` or its `-parallel 2` and memory caps.
 - Every limit has a test that crosses it: nesting depth, file size, folder total, work budgets.
   Build the hostile input in the test (`strings.Repeat`, a generator function), not in a file.
 - Security behaviour gets a test: XSS-shaped names, path traversal, hidden files, size caps.

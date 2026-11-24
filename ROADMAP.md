@@ -382,14 +382,14 @@ is simply dropped. The site, README, rules and threat model change with it.
 | ✅ Module list and build provenance on every release | Know what's inside; prove CI built it (`Bikasend-<tag>-modules.txt` from `go version -m`; signed attestations, `gh attestation verify`). A formal SPDX/CycloneDX SBOM would need a generator tool. | P2 | S | ✅ |
 | ✅ Fuzz tests for the Swagger parser | Untrusted files from any repo (`go test -fuzz`) | P2 | S | ✅ |
 | ✅ Content-Security-Policy in the app webview | Same idea as the site, as defence in depth | P2 | S | ✅ |
-| ✅ Monthly scheduled audit | GitHub Action on a cron: `make security` plus an issue when it fails | P2 | S | ✅ |
+| ✅ Monthly scheduled audit | GitHub Action on a cron: `just security` plus an issue when it fails | P2 | S | ✅ |
 | ✅ Threat model doc | Webview ↔ Go bridge, secrets, the download site, CI | P2 | S | ✅ |
 
 ### Engineering
 
 | Item | Why | P | Effort | Deps |
 | --- | --- | --- | --- | --- |
-| ✅ CI on pull requests | `go vet`, `go test`, `make security` on every PR, not only on tags | P1 | S | ✅ |
+| ✅ CI on pull requests | `go vet`, `go test`, `just security` on every PR, not only on tags | P1 | S | ✅ |
 | ✅ `golangci-lint` config with depguard boundaries | Enforce the import boundaries | P2 | S | ✅ (dev tool) |
 | ✅ `go-arch-lint` config | Enforce the `cmd` / `internal` / `pkg/sdk` layering | P2 | S | ✅ (dev tool) |
 | ✅ Pre-commit hooks | Lint, arch lint, tests before every commit | P2 | S | ✅ (dev tool) |
