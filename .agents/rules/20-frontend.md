@@ -21,7 +21,9 @@
 
 - `layout.html` (shared head, header, footer, notes), `index.html`, `changelog.html`, embedded
   with `//go:embed`. CSS lives in `static/site.css`. No JS, no `<style>` blocks, no `style=`
-  attributes: the CSP blocks them.
+  attributes: the CSP blocks them. The one exception is the `application/ld+json` data block
+  in `index.html` for search engines: data the browser never runs, every value filled by
+  `html/template`, which escapes it as JSON.
 - No external fonts, images or CSS: the CSP allows only `'self'`. Static files live in
   `internal/site/api/static/` and are served from `/static/{name}` (allowlisted at start-up).
 - Font: Open Sans (SIL OFL 1.1, free to use and ship), self-hosted (`OpenSans.woff2`, Latin

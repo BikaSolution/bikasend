@@ -62,6 +62,7 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | SHA-256 next to every download, how to verify | Download, FAQ | `digest` in `pkg/github`; `SHA256` in `internal/site/core/service.go` |
 | Signed build provenance, `gh attestation verify` from v0.1.4 | FAQ | `Attest build provenance` step in `release.yml` |
 | Page title and meta description, also in link previews | `<head>`, `static/og.jpg` | The one-line description in `.agents/AGENTS.md`; `indexTitle`/`indexDescription` in `internal/site/api/handlers.go` |
+| Structured data for search engines: free, MIT, platforms, latest version, repo | `<head>` (`application/ld+json`) | `index.html`; `indexDescription` in `internal/site/api/handlers.go`; `LICENSE`; the Download rows above |
 | Source on GitHub, MIT licence links | Header, hero, footer | `-repo` flag in `cmd/site`; `LICENSE` |
 | README badges: Go and Wails versions, "1 direct" dependency | `README.md` | `go.mod` |
 | Mascot credit (Go gopher, CC BY 4.0) and font licence | Footer, README | `img/`, `static/OFL-OpenSans.txt` |

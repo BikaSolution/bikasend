@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -146,7 +147,7 @@ func TestHandlers(t *testing.T) {
 			path:       "/",
 			wantStatus: http.StatusOK,
 			contains: []string{
-				"<title>Bikasend: open-source Swagger and OpenAPI desktop client</title>",
+				"<title>Bikasend: free, open-source API client for Swagger and OpenAPI</title>",
 				`<link rel="canonical" href="https://send.example.com/">`,
 				`<meta property="og:url" content="https://send.example.com/">`,
 				`<meta property="og:image" content="https://send.example.com/static/og.jpg">`,
@@ -271,8 +272,32 @@ func TestWithoutPublicURL(t *testing.T) {
 	if body := get("/robots.txt").Body.String(); strings.Contains(body, "Sitemap") {
 		t.Errorf("robots without a public URL: %q", body)
 	}
-	if body := get("/").Body.String(); strings.Contains(body, "canonical") || strings.Contains(body, "og:url") || strings.Contains(body, "github.com") {
-		t.Error("index without options must leave out canonical, og:url and GitHub links")
+	if body := get("/").Body.String(); strings.Contains(body, "canonical") || strings.Contains(body, "og:url") || strings.Contains(body, "github.com") || strings.Contains(body, "ld+json") {
+		t.Error("index without options must leave out canonical, og:url, GitHub links and structured data")
+	}
+}
+
+func TestStructuredData(t *testing.T) {
+	var down atomic.Bool
+	// A tag that tries to end the script element and add its own JSON fields.
+	handler := newHandler(t, `[{"tag_name": "v1.0.0</script><script>alert(1)</script>\", \"x\": \"y", "published_at": "2026-11-01T10:00:00Z", "assets": []}]`, &down)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := w.Body.String()
+	_, rest, ok := strings.Cut(body, `<script type="application/ld+json">`)
+	raw, _, closed := strings.Cut(rest, "</script>")
+	if !ok || !closed {
+		t.Fatal("no structured data block")
+	}
+	var app map[string]any
+	if err := json.Unmarshal([]byte(raw), &app); err != nil {
+		t.Fatalf("structured data is not JSON: %v\n%s", err, raw)
+	}
+	if app["@type"] != "SoftwareApplication" || app["url"] != "https://send.example.com" || app["description"] != indexDescription || app["x"] != nil {
+		t.Errorf("structured data = %v", app)
+	}
+	if v, _ := app["softwareVersion"].(string); !strings.HasPrefix(v, "v1.0.0</script>") || strings.Count(body, "<script") != 1 {
+		t.Errorf("the tag must stay a JSON string inside one script element: %q", v)
 	}
 }
 

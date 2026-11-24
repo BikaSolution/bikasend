@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 {{template "meta" .}}
+{{- with .PublicURL}}
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Bikasend", "description": {{$.Description}}, "url": {{.}}, "image": {{printf "%s/static/og.jpg" .}}, "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 13+, Windows 10/11, Linux", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Organization", "name": "BikaSolutions"}{{with $.Latest}}, "softwareVersion": {{.Tag}}, "downloadUrl": {{printf "%s/#download" $.PublicURL}}{{end}}{{with $.RepoURL}}, "sameAs": [{{.}}]{{end}}}</script>
+{{- end}}
 </head>
 <body>
 {{- define "platformIcon" -}}
@@ -23,7 +26,7 @@
 <section class="hero">
   <div class="wrap">
     <div>
-      <p class="eyebrow">Desktop API client</p>
+      <p class="eyebrow">Free, open-source desktop API client</p>
       <h1>Send requests straight from your Swagger docs.</h1>
       <p class="lead">Bikasend opens a repo, finds its Swagger and OpenAPI files, and turns every operation into a ready-to-send request. There are no collections to build, no account to create and nothing to sync.</p>
       <div class="cta">

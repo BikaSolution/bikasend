@@ -52,8 +52,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{
 }).ParseFS(templates, "templates/*.html"))
 
 const (
-	indexTitle       = "Bikasend: open-source Swagger and OpenAPI desktop client"
-	indexDescription = "Free, open-source desktop API client. Open a repo, pick an operation from its Swagger or OpenAPI files, and send it. A small alternative to Postman."
+	indexTitle       = "Bikasend: free, open-source API client for Swagger and OpenAPI"
+	indexDescription = "Free, open-source API client and Postman alternative for macOS, Windows and Linux. Open a repo, pick an operation from its Swagger or OpenAPI files, send it."
 	changelogTitle   = "Changelog: Bikasend"
 	changelogDesc    = "Every Bikasend release with its notes, downloads and SHA-256 checksums."
 )
