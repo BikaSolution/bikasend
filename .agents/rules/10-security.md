@@ -66,8 +66,8 @@ that crosses a boundary updates it in the same PR.
   uploads (`maxUpload`), `.bika.json` (`maxConfig`) and aws CLI output are capped. Keep a cap on
   anything new.
 - **Bounded work.** A small hostile file must not cost unbounded memory or time. YAML nesting
-  (`maxYAMLDepth`), generated examples (`maxExampleNodes`, `maxExampleTotal`) and response checks
-  (`maxChecks`) have limits. Every loop over untrusted input must consume input on each pass.
+  (`maxYAMLDepth`), path keys (`maxPathKey`, no control or bidi characters), generated examples
+  (`maxExampleNodes`, `maxExampleTotal`) and response checks (`maxChecks`) have limits. Every loop over untrusted input must consume input on each pass.
 - **The webview never hands Go a URL to open for a secret.** `OpenSecretSource` takes a variable
   name; Go builds the AWS console URL from the stored reference (`SecretConsoleURL`), with a fixed
   host and a region that must match an AWS region pattern.

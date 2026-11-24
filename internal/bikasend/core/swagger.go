@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/BikaSolution/bikasend/pkg/sdk/bikasend"
 )
@@ -22,6 +23,7 @@ const (
 	// Refs can fan out (20 properties, each a ref with 20 more); budgets stop exponential examples.
 	maxExampleNodes = 2_000
 	maxExampleTotal = 1_000_000
+	maxPathKey      = 2 << 10
 )
 
 var methods = []string{"get", "post", "put", "patch", "delete", "head", "options"}
@@ -278,6 +280,9 @@ func (d *docs) parse(file string) (bikasend.Spec, map[string]opDetail, error) {
 	paths := obj(doc["paths"])
 	ops := map[string]opDetail{}
 	for _, p := range sortedKeys(paths) {
+		if err := checkPathKey(p); err != nil {
+			return spec, ops, errors.Join(bikasend.ErrInvalidSpec, err)
+		}
 		item, itemFile, err := d.deref(file, paths[p])
 		if err != nil {
 			return spec, ops, errors.Join(bikasend.ErrInvalidSpec, fmt.Errorf("%s: %w", p, err))
@@ -301,6 +306,17 @@ func (d *docs) parse(file string) (bikasend.Spec, map[string]opDetail, error) {
 		}
 	}
 	return spec, ops, nil
+}
+
+// checkPathKey refuses paths that would flood the UI or hide text; the error quotes only the start.
+func checkPathKey(p string) error {
+	if len(p) > maxPathKey {
+		return fmt.Errorf("path %.40q… is %d bytes, limit is %d", p, len(p), maxPathKey)
+	}
+	if strings.ContainsFunc(p, unicode.IsControl) || unsafeRune(p) != 0 || strings.ContainsAny(p, "\u2028\u2029") {
+		return fmt.Errorf("path %.40q has a control or bidi character", p)
+	}
+	return nil
 }
 
 func servers(doc map[string]any, swagger2 bool) []string {
