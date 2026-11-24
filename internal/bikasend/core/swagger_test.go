@@ -164,6 +164,9 @@ func TestParse(t *testing.T) {
 	if f := byPath["fanout/openapi.json"]; f.Error != "" || len(f.Operations) != 1 || f.Operations[0].Body == "" || len(f.Operations[0].Body) > 1<<20 {
 		t.Errorf("fan-out spec must get a bounded example: error %q, body %d bytes", f.Error, len(f.Operations[0].Body))
 	}
+	if h := byPath["fanout/openapi.json"].Operations[0].BodyHints; len(h) == 0 || len(h) > maxHints {
+		t.Errorf("fan-out spec must get bounded body hints: %d", len(h))
+	}
 	if y := byPath["yaml/swagger.yaml"]; y.Title != "YAML API" || len(y.Operations) != 1 || y.Operations[0].Summary != "Ping" {
 		t.Errorf("yaml spec = %+v", y)
 	}
@@ -225,6 +228,49 @@ func TestParse(t *testing.T) {
 	}
 	if _, ok := ops["api/swagger.json GET /items/{id}"]; !ok {
 		t.Error("op details missing for validation")
+	}
+}
+
+const hintSpec = `{
+  "openapi": "3.0.0",
+  "paths": {"/orders": {"post": {"requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Order"}}}}, "responses": {}}},
+    "/ping": {"get": {"responses": {}}}},
+  "components": {"schemas": {"Order": {"type": "object", "properties": {
+    "status": {"type": "string", "enum": ["new", "paid"]},
+    "rush": {"type": "boolean"},
+    "note": {"type": "string"},
+    "address": {"properties": {"city": {"type": "string"}, "zip": {"type": "string"}}},
+    "items": {"type": "array", "items": {"allOf": [{"properties": {"sku": {"type": "string"}}}, {"properties": {"qty": {"type": "integer", "enum": [1, 2]}}}]}},
+    "parent": {"$ref": "#/components/schemas/Order"}
+  }}}}
+}`
+
+func TestBodyHints(t *testing.T) {
+	spec, _, err := newDocs(fstest.MapFS{"openapi.json": {Data: []byte(hintSpec)}}).parse("openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []bikasend.BodyHint{
+		{Path: "", Kind: "object", Keys: []string{"address", "items", "note", "parent", "rush", "status"}, Enum: []string{}},
+		{Path: "address", Kind: "object", Keys: []string{"city", "zip"}, Enum: []string{}},
+		{Path: "items[]", Kind: "object", Keys: []string{"sku", "qty"}, Enum: []string{}},
+		{Path: "items[].qty", Kind: "integer", Keys: []string{}, Enum: []string{"1", "2"}},
+		{Path: "rush", Kind: "boolean", Keys: []string{}, Enum: []string{"true", "false"}},
+		{Path: "status", Kind: "string", Keys: []string{}, Enum: []string{`"new"`, `"paid"`}},
+	}
+	if got := spec.Operations[0].BodyHints; !reflect.DeepEqual(got, want) {
+		t.Errorf("hints =\n%+v\nwant\n%+v", got, want)
+	}
+	if got := spec.Operations[1].BodyHints; got == nil || len(got) != 0 {
+		t.Errorf("an operation without a body must have an empty hint list, got %#v", got)
+	}
+
+	wide := map[string]any{}
+	for i := range maxHints + 10 {
+		wide[fmt.Sprintf("p%03d", i)] = map[string]any{"type": "boolean"}
+	}
+	if got := newDocs(nil).bodyHints("x.json", map[string]any{"properties": wide}); len(got) != maxHints {
+		t.Errorf("hints past the cap: %d, want %d", len(got), maxHints)
 	}
 }
 

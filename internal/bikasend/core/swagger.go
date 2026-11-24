@@ -372,6 +372,7 @@ func (d *docs) operation(file, method, p string, op map[string]any, shared, secu
 		Params:      []bikasend.Param{},
 		Form:        []bikasend.Field{},
 		Responses:   []bikasend.ResponseDoc{},
+		BodyHints:   []bikasend.BodyHint{},
 		BodyType:    "none",
 	}
 	if tags := list(op["tags"]); len(tags) > 0 {
@@ -473,6 +474,7 @@ func (d *docs) operation(file, method, p string, op map[string]any, shared, secu
 				out.Body = string(b)
 			}
 		}
+		out.BodyHints = d.bodyHints(bodyFile, bodySchema)
 	case "xml":
 		headers = append(headers, "Content-Type: application/xml")
 	case "text":
@@ -700,6 +702,96 @@ func (d *docs) example(file string, v any, seen []string, left *int) any {
 		}
 	}
 	return nil
+}
+
+const (
+	maxHints     = 200
+	maxHintItems = 100
+	maxHintEnum  = 256
+)
+
+// bodyHints lists the keys and enum values of a request-body schema per JSON path, within the example budgets.
+func (d *docs) bodyHints(file string, schema any) []bikasend.BodyHint {
+	out := []bikasend.BodyHint{}
+	budget := min(maxExampleNodes, d.examplesLeft)
+	left := budget
+	d.hint(file, schema, "", nil, &left, map[string]int{}, &out)
+	d.examplesLeft -= budget - left
+	return out
+}
+
+// hint walks the schema like example does; a ref already on the path is a cycle and stops.
+func (d *docs) hint(file string, v any, at string, seen []string, left *int, index map[string]int, out *[]bikasend.BodyHint) {
+	s := obj(v)
+	if s == nil || len(seen) > 16 || *left <= 0 || len(at) > maxPathKey {
+		return
+	}
+	*left--
+	if r, ok := s["$ref"].(string); ok {
+		key := file + r
+		if slices.Contains(seen, key) {
+			return
+		}
+		target, tFile, err := d.deref(file, s)
+		if err == nil {
+			d.hint(tFile, target, at, append(seen, key), left, index, out)
+		}
+		return
+	}
+	for _, k := range []string{"allOf", "oneOf", "anyOf"} {
+		for _, part := range list(s[k]) {
+			d.hint(file, part, at, seen, left, index, out)
+		}
+	}
+
+	kind := schemaType(s)
+	props := obj(s["properties"])
+	switch {
+	case kind == "" && props != nil:
+		kind = "object"
+	case kind == "" && s["items"] != nil:
+		kind = "array"
+	}
+	var enum []string
+	for _, e := range list(s["enum"]) {
+		if b, err := json.Marshal(e); err == nil && len(b) <= maxHintEnum {
+			enum = append(enum, string(b))
+		}
+	}
+	if kind == "boolean" {
+		enum = append(enum, "true", "false")
+	}
+	if keys := sortedKeys(props); len(keys)+len(enum) > 0 {
+		i, ok := index[at]
+		if !ok && len(*out) < maxHints {
+			i, ok = len(*out), true
+			index[at] = i
+			*out = append(*out, bikasend.BodyHint{Path: at, Kind: kind, Keys: []string{}, Enum: []string{}})
+		}
+		if ok {
+			h := &(*out)[i]
+			for _, k := range keys {
+				if len(h.Keys) < maxHintItems && !slices.Contains(h.Keys, k) {
+					h.Keys = append(h.Keys, k)
+				}
+			}
+			for _, e := range enum {
+				if len(h.Enum) < maxHintItems && !slices.Contains(h.Enum, e) {
+					h.Enum = append(h.Enum, e)
+				}
+			}
+		}
+	}
+	for _, name := range sortedKeys(props) {
+		child := name
+		if at != "" {
+			child = at + "." + name
+		}
+		d.hint(file, props[name], child, seen, left, index, out)
+	}
+	if kind == "array" {
+		d.hint(file, s["items"], at+"[]", seen, left, index, out)
+	}
 }
 
 // OpenAPI 3.1 allows a list of types, for example ["string", "null"].
