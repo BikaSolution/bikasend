@@ -568,7 +568,9 @@ func TestUI(t *testing.T) {
 	if url != "{{baseUrl}}/items/{id}" {
 		t.Errorf("URL = %q, want {{baseUrl}}/items/{id}", url)
 	}
-	waitFor("the empty path param is marked apart from variables", `(() => { const m = [...document.querySelectorAll('.urlbar .hl mark')]; return m.length === 2 && m[0].className === 'ok' && m[1].className === 'param empty' && m[1].textContent === '{id}'; })()`)
+	waitFor("the empty path param is marked apart from variables", `(() => { const m = [...document.querySelectorAll('.urlbar .hl mark')]; return m.length === 2 && m[0].className === 'ok' && m[1].className === 'param unfilled' && m[1].textContent === '{id}'; })()`)
+	// The marks sit under the input's text: a param mark is exactly as tall as a variable's.
+	waitFor("the param mark is the size of its text", `(() => { const [v, p] = [...document.querySelectorAll('.urlbar .hl mark')].map((m) => m.getBoundingClientRect()); return v.height > 0 && p.height === v.height && p.top === v.top; })()`)
 	waitFor("the version shows in the top bar", `document.querySelector('#versionBtn').textContent === 'dev' && !document.querySelector('#versionBtn').classList.contains('update')`)
 	must("check for updates", d.eval(`document.querySelector('#versionBtn').click()`, nil))
 	waitFor("a dev build says it does not check", `document.querySelector('#toast').textContent === 'This build does not check for updates.'`)

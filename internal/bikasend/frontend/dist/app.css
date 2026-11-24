@@ -165,7 +165,7 @@ button:disabled { opacity: .55; cursor: default; }
 .hl mark.secret { background: var(--var-secret); }
 .hl mark.missing { background: var(--var-missing); }
 .hl mark.param { background: var(--var-param); }
-.hl mark.param.empty { box-shadow: inset 0 -2px 0 var(--warn); }
+.hl mark.param.unfilled { box-shadow: inset 0 -2px 0 var(--warn); }
 /* A JSON body shows the overlay's coloured text; the textarea keeps the caret and the selection. */
 .field.json textarea { color: transparent; caret-color: var(--text); }
 .field.json textarea::selection { color: var(--text); background: var(--sel); }

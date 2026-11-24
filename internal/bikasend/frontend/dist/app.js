@@ -111,7 +111,7 @@ function usedVars(tab) {
 
 function paramStatus(name, tab) {
   const p = tab && (tab.req.pathParams || []).find((x) => x.name === name);
-  return p && p.value ? 'param' : 'param empty';
+  return p && p.value ? 'param' : 'param unfilled';
 }
 
 const MAX_JSON_TEXT = 200_000;
