@@ -237,7 +237,7 @@ func TestInstallUpdate(t *testing.T) {
 	readFile := func(p string) string { b, _ := os.ReadFile(p); return string(b) }
 
 	t.Run("linux replaces the binary and starts it", func(t *testing.T) {
-		exe := filepath.Join(t.TempDir(), "Bikasend")
+		exe := filepath.Join(realDir(t), "Bikasend")
 		writeFile(t, exe, "old")
 		s, _, started := setup(t, "linux", exe, makeZip(t, zipEntry{"Bikasend", 0o755, "new"}))
 		res, err := s.DownloadUpdate(ctx)
@@ -262,7 +262,7 @@ func TestInstallUpdate(t *testing.T) {
 	})
 
 	t.Run("windows moves the running exe aside", func(t *testing.T) {
-		exe := filepath.Join(t.TempDir(), "Bikasend.exe")
+		exe := filepath.Join(realDir(t), "Bikasend.exe")
 		writeFile(t, exe, "old")
 		s, _, _ := setup(t, "windows", exe, makeZip(t, zipEntry{"Bikasend.exe", 0o755, "new"}))
 		if res, err := s.DownloadUpdate(ctx); err != nil || !res.Installable {
@@ -281,7 +281,7 @@ func TestInstallUpdate(t *testing.T) {
 	})
 
 	t.Run("macOS swaps the bundle", func(t *testing.T) {
-		apps := t.TempDir()
+		apps := realDir(t)
 		bundle := filepath.Join(apps, "Bikasend.app")
 		writeFile(t, filepath.Join(bundle, "Contents", "MacOS", "Bikasend"), "old")
 		writeFile(t, filepath.Join(bundle, "Contents", "Stale.txt"), "gone")
@@ -324,7 +324,7 @@ func TestInstallUpdate(t *testing.T) {
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			exe := filepath.Join(t.TempDir(), "Bikasend")
+			exe := filepath.Join(realDir(t), "Bikasend")
 			writeFile(t, exe, "old")
 			s, gh, started := setup(t, "linux", exe, makeZip(t, zipEntry{"Bikasend", 0o755, "new"}))
 			// An earlier checked download must not stay installable after this one.
@@ -347,7 +347,7 @@ func TestInstallUpdate(t *testing.T) {
 	}
 
 	t.Run("a failed swap keeps the previous app", func(t *testing.T) {
-		apps := t.TempDir()
+		apps := realDir(t)
 		bundle := filepath.Join(apps, "Bikasend.app")
 		writeFile(t, filepath.Join(bundle, "Contents", "MacOS", "Bikasend"), "old")
 		s, _, started := setup(t, "darwin", filepath.Join(bundle, "Contents", "MacOS", "Bikasend"),
@@ -380,7 +380,7 @@ func TestInstallUpdate(t *testing.T) {
 	})
 
 	t.Run("a zip changed after the check", func(t *testing.T) {
-		exe := filepath.Join(t.TempDir(), "Bikasend")
+		exe := filepath.Join(realDir(t), "Bikasend")
 		writeFile(t, exe, "old")
 		s, _, _ := setup(t, "linux", exe, makeZip(t, zipEntry{"Bikasend", 0o755, "new"}))
 		res, err := s.DownloadUpdate(ctx)
@@ -394,6 +394,16 @@ func TestInstallUpdate(t *testing.T) {
 			t.Errorf("install = %v, binary %q", err, readFile(exe))
 		}
 	})
+}
+
+// realDir resolves links and Windows short names, as installTarget does.
+func realDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
 
 func TestInstallHostileZip(t *testing.T) {
