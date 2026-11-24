@@ -222,7 +222,7 @@ and shows no version. The image has no curl, so the compose health check runs th
 (`/site -healthcheck`, a 3 s GET of `http://127.0.0.1:8091/healthz`) every 30 seconds. The tunnel
 starts once the site is healthy, and `docker compose ps` shows the state. For a check from
 outside, point a monitor at `https://send.bikasolutions.co.za/healthz` (or your own site's
-address). For example, an UptimeRobot free-plan keyword monitor that looks for `ok`, or a
+address). Any uptime service with a free keyword monitor that looks for `ok` works, or a
 Cloudflare health check if your plan has one. The monitor uses `GET` or `HEAD`, so the WAF rule
 below lets it through.
 

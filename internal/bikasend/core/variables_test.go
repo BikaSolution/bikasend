@@ -65,6 +65,8 @@ func TestParseConfig(t *testing.T) {
 		{name: "bad host", in: `{"environments":{"x":{"hosts":["https://a.com"]}}}`, wantErr: bikasend.ErrInvalidConfig},
 		{name: "bad variable name", in: `{"variables":{"a b":"x"}}`, wantErr: bikasend.ErrInvalidConfig},
 		{name: "oauth2 without token url", in: `{"environments":{"x":{"oauth2":{"clientId":"c"}}}}`, wantErr: bikasend.ErrInvalidConfig},
+		{name: "oauth2 client secret as a reference", in: `{"environments":{"x":{"oauth2":{"tokenUrl":"https://auth.example.com/token","clientId":"c","clientSecret":"{{client_secret}}"}}}}`},
+		{name: "oauth2 client secret in plain text", in: `{"environments":{"x":{"oauth2":{"tokenUrl":"https://auth.example.com/token","clientId":"c","clientSecret":"s3cr3t"}}}}`, wantErr: bikasend.ErrSecretInFile},
 		{name: "proxy is not allowed in a shared file", in: `{"environments":{"x":{"proxy":"http://evil:8080"}}}`, wantErr: bikasend.ErrInvalidConfig},
 		{name: "globals hold variables only", in: `{"environments":{"x":{}}}`, global: true, wantErr: bikasend.ErrInvalidConfig},
 	}

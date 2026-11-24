@@ -231,7 +231,7 @@
     </details>
     <details>
       <summary>How do updates work?</summary>
-      <p>Bikasend asks this site for a new version when it starts; you can turn that off in Settings. The version in the top bar lights up when one is out. Click it and Bikasend downloads the build for your system, checks its SHA-256 against this site and against the GitHub release, and shows you both. It replaces the app and restarts only when both match and you click. If GitHub can’t confirm the file, Bikasend deletes it.</p>
+      <p>Bikasend asks this site for a new version when it starts; you can turn that off in Settings. The version in the top bar lights up when one is out. Click it and Bikasend downloads the build for your system, checks its SHA-256 against this site and against the GitHub release, checks the release’s signature from the project’s offline release key, and shows you the result. It replaces the app and restarts only when all three match and you click. If any check fails, Bikasend deletes the file.</p>
     </details>
     <details>
       <summary>Which Swagger files does it read?</summary>

@@ -201,6 +201,9 @@ func parseConfig(data []byte, global bool) (configFile, error) {
 		if env.OAuth2 != nil && (env.OAuth2.TokenURL == "" || env.OAuth2.ClientID == "") {
 			return c, errors.Join(bikasend.ErrInvalidConfig, fmt.Errorf("%s: oauth2 needs tokenUrl and clientId", name))
 		}
+		if env.OAuth2 != nil && !isOnlyReference(env.OAuth2.ClientSecret) {
+			return c, fmt.Errorf("%w: %s: oauth2 clientSecret must be a {{variable}}, never the secret itself", bikasend.ErrSecretInFile, name)
+		}
 		if env.SigV4 != nil && env.SigV4.Service == "" {
 			return c, errors.Join(bikasend.ErrInvalidConfig, fmt.Errorf("%s: sigv4 needs a service", name))
 		}

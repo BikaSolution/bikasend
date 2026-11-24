@@ -140,7 +140,7 @@
             <dt><code>timeoutSeconds</code></dt><dd>0 to 600. Left out or 0 means 2 minutes.</dd>
             <dt><code>followRedirects</code></dt><dd><code>true</code> or <code>false</code>. Left out means Bikasend follows up to 10 redirects.</dd>
             <dt><code>tls</code></dt><dd><code>caFile</code> adds a CA to the system ones; <code>certFile</code> and <code>keyFile</code> are a client certificate. Paths are relative and stay inside the folder; absolute paths and <code>..</code> are refused.</dd>
-            <dt><code>oauth2</code></dt><dd>Client credentials: <code>tokenUrl</code> and <code>clientId</code> are required, plus <code>clientSecret</code> and <code>scopes</code>. All of them can use variables, so keep the secret in a variable that points to AWS or asks for it. The token URL must be https (http only on loopback), and its host must be in <code>hosts</code>. Bikasend keeps the token in memory until it expires.</dd>
+            <dt><code>oauth2</code></dt><dd>Client credentials: <code>tokenUrl</code> and <code>clientId</code> are required, plus <code>clientSecret</code> and <code>scopes</code>. All of them can use variables. <code>clientSecret</code> must be a variable, such as <code>{{"{{client_secret}}"}}</code> pointing to AWS or asking for it: Bikasend refuses the secret itself in a shared file. The token URL must be https (http only on loopback), and its host must be in <code>hosts</code>. Bikasend keeps the token in memory until it expires.</dd>
             <dt><code>sigv4</code></dt><dd>AWS Signature V4: <code>service</code> is required; <code>region</code> falls back to the one in <code>aws</code>. Bikasend signs with the credentials of the <code>aws</code> profile.</dd>
           </dl>
           <p>You pick OAuth2 or SigV4 per request in its auth settings. Any other field is an error, so a typo shows up at once. There is no proxy field: a proxy is a personal setting in the app.</p>
@@ -184,12 +184,13 @@
         <article id="updates">
           <h2>Updates</h2>
           <p>When it starts, Bikasend asks this site whether a newer version is out. You can turn that off in Settings; it is the only call the app makes on its own. When an update is out, the version in the top bar changes to <strong>Update to …</strong>. Click it to download the build for your system into your Downloads folder, or your home folder if there is none.</p>
-          <p>Before it offers to install, Bikasend checks the file’s SHA-256 twice:</p>
+          <p>Before it offers to install, Bikasend checks the file three ways:</p>
           <ol>
-            <li>against the hash this site lists, and</li>
-            <li>against the hash GitHub lists for the release.</li>
+            <li>its SHA-256 against the hash this site lists,</li>
+            <li>against the hash GitHub lists for the release, and</li>
+            <li>against the release’s <code>SHA256SUMS</code> file, which must carry a valid signature from the project’s release key. That key stays offline with the maintainer, so neither this site nor the GitHub account alone can ship an update.</li>
           </ol>
-          <p>If GitHub can’t confirm the file, Bikasend deletes it. When both match, it shows you the hashes, and <strong>Update and restart</strong> replaces the app and starts the new one. Open request tabs close. If Bikasend cannot replace the app where it runs, it says why; unzip the saved file and replace the app yourself.</p>
+          <p>If any check fails, Bikasend deletes the file. When both match, it shows you the hashes, and <strong>Update and restart</strong> replaces the app and starts the new one. Open request tabs close. If Bikasend cannot replace the app where it runs, it says why; unzip the saved file and replace the app yourself.</p>
           <p>Bikasend only updates to a newer version, from the site built into it.</p>
         </article>
 
