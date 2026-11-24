@@ -39,7 +39,7 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | AWS Secrets Manager and Parameter Store through the user's `aws` CLI | Features, FAQ | `pkg/awscli`; `LoadSecrets` in `core/http.go` |
 | Secrets only to listed hosts, not over plain http, not along cross-host redirects | Features | `guard` and `CheckRedirect` in `core/http.go` |
 | Refuses secret-looking values in `.bika.json` | FAQ | `guardFileValue` in `core/variables.go` |
-| JSON tree, search, timing, images, spec check; copy as cURL, PowerShell, HTTPie, JavaScript or Python, secrets as environment variables | Features | `app.js` `renderBody`; `core/validate.go`; `exporters` in `core/curl.go` |
+| JSON tree, search, timing, images, spec check; copy a value or its path, diff against the last response; copy as cURL, PowerShell, HTTPie, JavaScript or Python, secrets as environment variables | Features | `app.js` `renderBody`, `node`, `renderDiff`; `core/validate.go`; `exporters` in `core/curl.go` |
 | Environments and hosts editor, "Always allow" for a host | README | `envPanel`, `send` in `app.js`; `CreateEnvironment`, `SetHosts` in `core/service.go` |
 | Version in the top bar, lights up for an update; update check at start (can be turned off), checked against the update site, GitHub and the release signature, installed on a click | Features, FAQ, README | `renderVersion`, `versionClick`, `updateDialog` in `app.js`; `CheckUpdates` default in `core/service.go`; `CheckUpdate`, `DownloadUpdate`, `githubDigest`, `checkSignature`, `InstallUpdate` in `core/history.go`; `pkg/sign`; `-X main.repo` in `release.yml` |
 | Path params highlighted, set from a hover card | README | `fillHighlight`, `showParamCard` in `app.js` |

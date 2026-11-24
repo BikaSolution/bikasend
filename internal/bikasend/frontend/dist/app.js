@@ -724,9 +724,11 @@ function updateDialog() {
     h('table', { class: 'hashes' }, h('tbody', {},
       h('tr', {}, h('th', {}, 'SHA-256 of the download'), h('td', { class: 'mono hash' }, d.sha256), h('td', {})),
       row('Update site lists', d.siteSha256, d.siteSha256 === d.sha256),
-      row('GitHub release lists', d.githubSha256, !!d.githubSha256 && d.githubSha256 === d.sha256))),
+      row('GitHub release lists', d.githubSha256, !!d.githubSha256 && d.githubSha256 === d.sha256),
+      h('tr', {}, h('th', {}, 'Release signature'), h('td', {}, 'SHA256SUMS, signed with the offline release key'),
+        h('td', { class: d.signed ? 'ok' : 'err' }, d.signed ? '✓ valid' : '✗ not confirmed')))),
     d.installable
-      ? h('p', {}, 'Both match. Bikasend replaces ', h('span', { class: 'mono' }, d.target), ' and restarts. ',
+      ? h('p', {}, 'All three match. Bikasend replaces ', h('span', { class: 'mono' }, d.target), ' and restarts. ',
         keep ? 'Open request tabs come back after the restart, with secret-looking values masked.' : 'Open request tabs close.')
       : h('p', { class: 'notice warn' }, d.reason + '. Unzip the saved file and replace the app yourself, or use the download page.'),
     h('p', { class: 'muted small' }, 'Saved: ', h('span', { class: 'mono' }, d.path)),
