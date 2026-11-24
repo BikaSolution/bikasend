@@ -3,7 +3,7 @@
 <head>
 {{template "meta" .}}
 {{- with .PublicURL}}
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Bikasend", "description": {{$.Description}}, "url": {{.}}, "image": {{printf "%s/static/og.jpg" .}}, "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 13+, Windows 10/11, Linux", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Organization", "name": "BikaSolutions"}{{with $.Latest}}, "softwareVersion": {{.Tag}}, "downloadUrl": {{printf "%s/#download" $.PublicURL}}{{end}}{{with $.RepoURL}}, "sameAs": [{{.}}]{{end}}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Bikasend", "description": {{$.Description}}, "url": {{.}}, "image": {{printf "%s%s" . (static "og.jpg")}}, "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 13+, Windows 10/11, Linux", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Organization", "name": "BikaSolutions"}{{with $.Latest}}, "softwareVersion": {{.Tag}}, "downloadUrl": {{printf "%s/#download" $.PublicURL}}{{end}}{{with $.RepoURL}}, "sameAs": [{{.}}]{{end}}}</script>
 {{- end}}
 </head>
 <body>
@@ -42,8 +42,8 @@
       {{end}}
     </div>
     <div class="visual">
-    <img class="mascot" src="/static/mascot.webp" width="520" height="563" alt="">
-    <img class="shot" src="/static/app.webp" width="800" height="496" alt="Bikasend in dark mode: the operations of an example API with method filters, a GET {{"{{baseUrl}}"}}/items/{id} request with the {id} path parameter highlighted and a masked API key, and a 200 JSON response.">
+    <img class="mascot" src="{{static "mascot.webp"}}" width="520" height="563" alt="">
+    <img class="shot" src="{{static "app.webp"}}" width="800" height="496" alt="Bikasend in dark mode: the operations of an example API with method filters, a GET {{"{{baseUrl}}"}}/items/{id} request with the {id} path parameter highlighted and a masked API key, and a 200 JSON response.">
     </div>
   </div>
 </section>

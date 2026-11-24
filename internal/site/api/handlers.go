@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -36,19 +37,32 @@ var staticFiles = func() map[string]string {
 	return paths
 }()
 
-// cssURL changes with the file, so a deploy never serves new HTML with a cached old stylesheet.
-var cssURL = func() string {
-	css, err := templates.ReadFile("static/site.css")
-	if err != nil {
-		panic(err)
+// staticURLs change with each file, so a deploy never serves new HTML with a cached old image or
+// stylesheet; Cloudflare and browsers keep /static/ for a day.
+var staticURLs = func() map[string]string {
+	urls := map[string]string{}
+	for name, p := range staticFiles {
+		data, err := templates.ReadFile(p)
+		if err != nil {
+			panic(err)
+		}
+		sum := sha256.Sum256(data)
+		urls[name] = "/static/" + name + "?v=" + hex.EncodeToString(sum[:4])
 	}
-	sum := sha256.Sum256(css)
-	return "/static/site.css?v=" + hex.EncodeToString(sum[:4])
+	return urls
 }()
 
+func staticURL(name string) (string, error) {
+	u, ok := staticURLs[name]
+	if !ok {
+		return "", fmt.Errorf("no static file %q", name)
+	}
+	return u, nil
+}
+
 var pages = template.Must(template.New("").Funcs(template.FuncMap{
-	"seg": url.PathEscape,
-	"css": func() string { return cssURL },
+	"seg":    url.PathEscape,
+	"static": staticURL,
 }).ParseFS(templates, "templates/*.html"))
 
 const (

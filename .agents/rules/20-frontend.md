@@ -26,6 +26,8 @@
   `html/template`, which escapes it as JSON.
 - No external fonts, images or CSS: the CSP allows only `'self'`. Static files live in
   `internal/site/api/static/` and are served from `/static/{name}` (allowlisted at start-up).
+  Link them with `{{static "name"}}`: the URL carries the file's hash, so a deploy is never hidden
+  by a cached old copy. Only `OpenSans.woff2` keeps a fixed URL, because `site.css` loads it.
 - Font: Open Sans (SIL OFL 1.1, free to use and ship), self-hosted (`OpenSans.woff2`, Latin
   subset, variable weights 300–800). Keep `OFL-OpenSans.txt` next to every copy. The app uses the
   same file. Only use fonts with an open licence (OFL or Apache 2.0).
