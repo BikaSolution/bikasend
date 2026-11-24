@@ -116,10 +116,28 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      # One folder per build: a build job runs third-party code and must not replace another's file.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: dist
-          merge-multiple: true
+          path: artifacts
+
+      - name: Take only the expected file from each build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag must look like v1.2.3"; exit 1; }
+          mkdir dist
+          for name in macos-universal windows-amd64 linux-amd64; do
+            want="Bikasend-$TAG-$name.zip"
+            extra=""
+            [ "$name" = linux-amd64 ] && extra="Bikasend-$TAG-modules.txt"
+            got="$(cd "artifacts/$name" && ls -A | sort | tr '\n' ' ')"
+            expect="$(printf '%s\n' "$want" $extra | sort | tr '\n' ' ')"
+            [ "$got" = "$expect" ] || { echo "artifact $name holds '$got', want '$expect'"; exit 1; }
+            cp "artifacts/$name/$want" dist/
+            [ -z "$extra" ] || cp "artifacts/$name/$extra" dist/
+          done
+          ls -l dist
 
       # Anyone can check a download came from this workflow: gh attestation verify <file> --repo <owner/repo>
       - name: Attest build provenance
@@ -131,6 +149,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag must look like v1.2.3"; exit 1; }
-          gh release upload "$TAG" dist/Bikasend-"$TAG"-* --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$TAG" dist/Bikasend-"$TAG"-* --repo "$GITHUB_REPOSITORY"

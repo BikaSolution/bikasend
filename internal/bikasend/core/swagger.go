@@ -68,7 +68,7 @@ func (d *docs) load(name string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	v, n, err := d.decode(name)
+	v, n, err := d.decode(name, size)
 	d.settle(name, size, v, n, err)
 	return v, err
 }
@@ -89,9 +89,10 @@ func (d *docs) reserve(name string) (int64, error) {
 	return info.Size(), nil
 }
 
-// decode reads and parses one file. It touches only the file system, so it runs in parallel.
-func (d *docs) decode(name string) (any, int64, error) {
-	data, err := readCapped(d.fsys, name, maxSpec)
+// decode reads and parses one file, at most the size reserved for it: a file that grew since
+// Stat fails rather than passing the folder cap. It touches only the file system, so it runs in parallel.
+func (d *docs) decode(name string, reserved int64) (any, int64, error) {
+	data, err := readCapped(d.fsys, name, reserved)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -142,7 +143,7 @@ func (d *docs) preload(files []string) {
 		slots <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-slots }()
-			j.v, j.n, j.err = d.decode(j.name)
+			j.v, j.n, j.err = d.decode(j.name, j.reserved)
 		})
 	}
 	wg.Wait()
@@ -764,21 +765,31 @@ func (d *docs) example(file string, v any, seen []string, left *int) any {
 	case "boolean":
 		return false
 	case "object":
-		out := map[string]any{}
-		for name, p := range obj(s["properties"]) {
-			out[name] = d.example(file, p, seen, left)
-		}
-		return out
+		return d.exampleObject(file, obj(s["properties"]), seen, left)
 	case "":
 		if props := obj(s["properties"]); props != nil {
-			out := map[string]any{}
-			for name, p := range props {
-				out[name] = d.example(file, p, seen, left)
-			}
-			return out
+			return d.exampleObject(file, props, seen, left)
 		}
 	}
 	return nil
+}
+
+// exampleObject charges the node's size before it sorts the keys, and long keys as they go, so a
+// huge or long-keyed node ends early instead of being walked on every visit.
+func (d *docs) exampleObject(file string, props map[string]any, seen []string, left *int) map[string]any {
+	out := map[string]any{}
+	*left -= len(props) / 8
+	if *left <= 0 {
+		return out
+	}
+	for _, name := range sortedKeys(props) {
+		*left -= len(name) / 64
+		if *left <= 0 || len(name) > maxPathKey {
+			break
+		}
+		out[name] = d.example(file, props[name], seen, left)
+	}
+	return out
 }
 
 const (
@@ -800,10 +811,13 @@ func (d *docs) bodyHints(file string, schema any) []bikasend.BodyHint {
 // hint walks the schema like example does; a ref already on the path is a cycle and stops.
 func (d *docs) hint(file string, v any, at string, seen []string, left *int, index map[string]int, out *[]bikasend.BodyHint) {
 	s := obj(v)
-	if s == nil || len(seen) > 16 || *left <= 0 || len(at) > maxPathKey {
+	if s == nil || len(seen) > 16 || *left <= 0 {
 		return
 	}
 	*left--
+	if len(at) > maxPathKey {
+		return
+	}
 	if r, ok := s["$ref"].(string); ok {
 		key := file + r
 		if slices.Contains(seen, key) {
@@ -854,14 +868,17 @@ func (d *docs) hint(file string, v any, at string, seen []string, left *int, ind
 		}
 		if ok {
 			h := &(*out)[i]
+			// Every hint goes to the webview: long keys and values spend the budget as they are added.
 			for _, k := range keys {
-				if len(h.Keys) < maxHintItems && !slices.Contains(h.Keys, k) {
+				if len(h.Keys) < maxHintItems && len(k) <= maxHintEnum && !slices.Contains(h.Keys, k) {
 					h.Keys = append(h.Keys, k)
+					*left -= len(k) / 64
 				}
 			}
 			for _, e := range enum {
 				if len(h.Enum) < maxHintItems && !slices.Contains(h.Enum, e) {
 					h.Enum = append(h.Enum, e)
+					*left -= len(e) / 64
 				}
 			}
 		}

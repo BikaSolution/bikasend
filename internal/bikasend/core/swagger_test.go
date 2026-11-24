@@ -283,6 +283,27 @@ func TestBodyHints(t *testing.T) {
 		t.Errorf("enum hints must skip long values and stop at %d: %d", maxHintItems, len(h[0].Enum))
 	}
 
+	// 200 refs to a schema with 100 keys of 200 bytes: about 4 MB of hints and body without the
+	// per-byte charge. Both must stay small, because both go to the webview.
+	var props, keys []string
+	for i := range 200 {
+		props = append(props, fmt.Sprintf(`"p%d": {"$ref": "#/components/schemas/B"}`, i))
+	}
+	for i := range 100 {
+		keys = append(keys, fmt.Sprintf(`"%s%03d": {"type": "string"}`, strings.Repeat("k", 197), i))
+	}
+	wideSpec := `{"openapi": "3.0.0", "paths": {"/x": {"post": {"requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {` +
+		strings.Join(props, ",") + `}}}}}, "responses": {"200": {"description": "ok"}}}}}, "components": {"schemas": {"B": {"type": "object", "properties": {` +
+		strings.Join(keys, ",") + `}}}}}`
+	ws, _, err := newDocs(fstest.MapFS{"w.json": {Data: []byte(wideSpec)}}).parse("w.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hints, _ := json.Marshal(ws.Operations[0].BodyHints)
+	if len(hints) > 200<<10 || len(ws.Operations[0].Body) > 200<<10 {
+		t.Errorf("long keys must spend the budget: %d KB of hints, %d KB of body", len(hints)>>10, len(ws.Operations[0].Body)>>10)
+	}
+
 	// A node with 100,000 keys spends the budget instead of being sorted on every visit.
 	huge := map[string]any{}
 	for i := range 100_000 {

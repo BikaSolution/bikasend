@@ -912,7 +912,7 @@ func (s *Service) LoadTabs() bikasend.OpenTabs {
 	if s.rootPath != "" && s.state.Settings.RestoreTabs {
 		for _, f := range s.readTabs() {
 			if f.Root == s.rootPath {
-				return f.Tabs
+				return cleanTabs(f.Tabs)
 			}
 		}
 	}

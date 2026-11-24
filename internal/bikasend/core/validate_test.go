@@ -114,6 +114,18 @@ func TestValidateResponse(t *testing.T) {
 		t.Errorf("patterns and uniqueItems past their caps must be skipped: %q", got)
 	}
 
+	// Compiled patterns cost their length and stop at maxPatterns; later ones are skipped.
+	pd := newDocs(nil)
+	budget := 1 << 30
+	for i := range maxPatterns {
+		if pd.pattern(fmt.Sprintf("^a%d$", i), &budget) == nil {
+			t.Fatalf("pattern %d under the cap was not compiled", i)
+		}
+	}
+	if pd.pattern("^b$", &budget) != nil || budget >= 1<<30 {
+		t.Errorf("a pattern past the cache cap must be skipped, and compiles must cost: budget %d", budget)
+	}
+
 	// Big values cost one check per KB: a 5 MB string down a 2^30 allOf fan-out stops at the budget.
 	big := newDocs(fstest.MapFS{"o.json": {Data: []byte(allOfChain(30, `{"type":"string","minLength":1,"const":"x"}`))}})
 	_, bops, err := big.parse("o.json")

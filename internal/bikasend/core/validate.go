@@ -22,6 +22,8 @@ const (
 	maxChecks = 100_000
 	// Go's regexp is linear, but compiling a huge pattern still costs; skip those.
 	maxPattern = 1_000
+	// Compiled patterns stay for the scan; past this many, new ones are skipped.
+	maxPatterns = 1_000
 	// uniqueItems compares encoded items; past this many items it is not checked.
 	maxUniqueItems = 2_000
 )
@@ -201,7 +203,7 @@ func (d *docs) check(file string, schemaNode, value any, at string, seen []strin
 			return
 		}
 		if spend(len(str)) {
-			d.checkString(s, str, report)
+			d.checkString(s, str, left, report)
 		}
 	case "boolean":
 		if kind(value) != want {
@@ -248,10 +250,10 @@ func checkNumber(s map[string]any, f float64, report func(string, ...any)) {
 	}
 }
 
-func (d *docs) checkString(s map[string]any, v string, report func(string, ...any)) {
+func (d *docs) checkString(s map[string]any, v string, left *int, report func(string, ...any)) {
 	checkCount(s, "minLength", "maxLength", utf8.RuneCountInString(v), "characters", report)
 	if p := str(s["pattern"]); p != "" {
-		if re := d.pattern(p); re != nil && !re.MatchString(v) {
+		if re := d.pattern(p, left); re != nil && !re.MatchString(v) {
 			report("does not match the pattern %s", quoteStart(p))
 		}
 	}
@@ -260,15 +262,19 @@ func (d *docs) checkString(s map[string]any, v string, report func(string, ...an
 	}
 }
 
-// pattern compiles and caches a schema's pattern; an invalid or huge one is skipped, not reported.
-func (d *docs) pattern(p string) *regexp.Regexp {
+// pattern compiles and caches a schema's pattern; an invalid, huge or uncached one past the
+// cache cap is skipped, not reported. A compile costs its length in checks.
+func (d *docs) pattern(p string, left *int) *regexp.Regexp {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if re, ok := d.patterns[p]; ok {
 		return re
 	}
+	if len(d.patterns) >= maxPatterns {
+		return nil
+	}
 	var re *regexp.Regexp
-	if len(p) <= maxPattern {
+	if *left -= len(p); len(p) <= maxPattern && *left > 0 {
 		re, _ = regexp.Compile(p)
 	}
 	if d.patterns == nil {

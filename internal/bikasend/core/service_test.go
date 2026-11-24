@@ -507,6 +507,7 @@ func TestTabs(t *testing.T) {
 	in := bikasend.OpenTabs{Active: 1, Tabs: []bikasend.SavedTab{
 		{Title: "Get item", Request: bikasend.Request{Method: http.MethodGet, URL: "{{baseUrl}}/items/7"}},
 		{Title: "POST /items?token=abc", Request: secretReq},
+		{Title: "Body type switched to form", Request: bikasend.Request{Method: http.MethodPost, URL: "{{baseUrl}}/items", BodyType: "form", Body: `{"session": "left-behind-value"}`}},
 	}}
 	if err := s.SaveTabs(in); err != nil {
 		t.Fatal(err)
@@ -518,7 +519,7 @@ func TestTabs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, leak := range []string{"k-123", "hunter2", "abc", "id_rsa", "attacker"} {
+	for _, leak := range []string{"k-123", "hunter2", "abc", "id_rsa", "attacker", "left-behind-value"} {
 		if strings.Contains(string(data), leak) {
 			t.Errorf("%s on disk holds %q:\n%s", tabsFile, leak, data)
 		}
@@ -527,7 +528,7 @@ func TestTabs(t *testing.T) {
 	restarted := NewService(Options{ConfigDir: s.opts.ConfigDir, AWS: func(string) AWS { return &fakeAWS{} }})
 	openRoot(t, restarted, root)
 	got := restarted.LoadTabs()
-	if len(got.Tabs) != 2 || got.Active != 1 || got.Tabs[0].Title != "Get item" || got.Tabs[0].Request.URL != "{{baseUrl}}/items/7" {
+	if len(got.Tabs) != 3 || got.Active != 1 || got.Tabs[0].Title != "Get item" || got.Tabs[0].Request.URL != "{{baseUrl}}/items/7" {
 		t.Fatalf("restored tabs = %+v", got)
 	}
 	r := got.Tabs[1].Request

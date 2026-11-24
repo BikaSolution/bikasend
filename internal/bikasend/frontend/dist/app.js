@@ -1631,18 +1631,23 @@ function lineDiff(a, b) {
   const x = a.slice(head, a.length - tail);
   const y = b.slice(head, b.length - tail);
   if (x.length * y.length > MAX_DIFF_CELLS) return 'Not compared: too many lines changed.';
+  // Compare line ids, not strings: long, similar lines would make each comparison slow.
+  const ids = new Map();
+  const id = (l) => { if (!ids.has(l)) ids.set(l, ids.size); return ids.get(l); };
+  const xi = x.map(id);
+  const yi = y.map(id);
   const w = y.length + 1;
   const lcs = new Uint16Array((x.length + 1) * w);
   for (let i = x.length - 1; i >= 0; i--) {
     for (let j = y.length - 1; j >= 0; j--) {
-      lcs[i * w + j] = x[i] === y[j] ? lcs[(i + 1) * w + j + 1] + 1 : Math.max(lcs[(i + 1) * w + j], lcs[i * w + j + 1]);
+      lcs[i * w + j] = xi[i] === yi[j] ? lcs[(i + 1) * w + j + 1] + 1 : Math.max(lcs[(i + 1) * w + j], lcs[i * w + j + 1]);
     }
   }
   const out = a.slice(0, head).map((l) => [' ', l]);
   let i = 0;
   let j = 0;
   while (i < x.length && j < y.length) {
-    if (x[i] === y[j]) { out.push([' ', x[i]]); i++; j++; }
+    if (xi[i] === yi[j]) { out.push([' ', x[i]]); i++; j++; }
     else if (lcs[(i + 1) * w + j] >= lcs[i * w + j + 1]) out.push(['-', x[i++]]);
     else out.push(['+', y[j++]]);
   }

@@ -164,7 +164,7 @@
         <article id="secrets">
           <h2>Secrets and hosts</h2>
           <p>Secrets come from four places: values you type into the session, prompts, environment variables, and AWS Secrets Manager or Parameter Store. AWS values load into memory through your own <code>aws</code> CLI and its login. Click <strong>Load secrets</strong>, or <strong>Sign in with AWS SSO</strong> when you are signed out. Bikasend runs the CLI without a shell. When you switch environment, it forgets the AWS values it loaded.</p>
-          <p>Secrets stay in the app’s memory. They are not written to disk or to a log, and the window shows them masked until you click <strong>Reveal</strong>. History is kept in memory unless you turn on saving in Settings; on disk, secret-looking values are masked. When a server echoes a request’s secret back, Bikasend masks it in the response.</p>
+          <p>Secrets stay in the app’s memory. They are not written to disk or to a log, and the window shows them masked until you click <strong>Reveal</strong>. History is kept in memory unless you turn on saving in Settings. Open tabs are saved so they come back after a restart (<strong>Reopen tabs on start</strong>, on by default). On disk, both mask secret-looking values; a value under a harmless-looking name is saved as it is, so keep secrets in variables. When a server echoes a request’s secret back, Bikasend masks it in the response.</p>
           <p>Before every request that carries a secret, Bikasend checks where it goes:</p>
           <ul>
             <li><strong>With a hosts list</strong>, a secret goes only to a listed host. A host outside the list is blocked; you can open the hosts editor, then send again.</li>

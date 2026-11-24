@@ -35,8 +35,9 @@ that crosses a boundary updates it in the same PR.
 - **Secrets stay in Go memory.** Session values, prompts, AWS values and OAuth2 tokens are never
   logged, written to disk, put in `localStorage` or sent to the webview. Views are masked; reveal
   and copy are explicit clicks. History on disk is opt-in and masks secret-looking values. Open
-  tabs on disk (`tabs.json`, off in Settings) go through the same masking in Go, keep no upload
-  paths or send confirmations, and the previous response for Diff stays in memory.
+  tabs on disk (`tabs.json`, on by default, off in Settings) go through the same masking in Go
+  (by name; a body its type does not send is masked whole), keep no upload paths or send
+  confirmations, and the previous response for Diff stays in memory.
 - **Secret guards on every send:** the environment's `hosts` list (also for the OAuth2 token
   URL, which needs one); with no list, only loopback or a host the user confirms on that send; no
   secret over plain http without a confirmation; no redirect with a secret to another host or from
@@ -136,8 +137,12 @@ that crosses a boundary updates it in the same PR.
 - Pass `${{ }}` values to `run:` through `env:`, never inline. Tag names are user input.
 - `actions/checkout` with `persist-credentials: false`. No shared Go cache in release builds.
 - Jobs that run third-party code (tests, `go install`, `wails build`) get read-only tokens. Only
-  the release's `publish` job can write, and it runs no project code: it downloads the build
-  artifacts, attests and uploads them to the draft. Pre-commit hooks are pinned to commit SHAs.
+  the release's `create` job (one `gh release create --draft`) and `publish` job can write, and
+  neither runs project code: `publish` takes exactly one expected file from each build's own
+  artifact, attests and uploads them to the draft. `just publish` signs only files that
+  `release.yml` attested for that tag's commit, and builds the signer from the tag; review any
+  change to `pkg/sign`, `cmd/sign` or the justfile before publishing. Pre-commit hooks are pinned
+  to commit SHAs.
 - Pin tool versions (`wails@v2.17.1`), never `@latest`, in CI. `just security` is the exception: a
   scanner must be current.
 - Dependabot (`.github/dependabot.yml`) watches Go modules, Actions and the Docker base image.

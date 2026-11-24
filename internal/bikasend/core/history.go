@@ -137,7 +137,8 @@ func scrubRequest(r bikasend.Request) bikasend.Request {
 		if b, err := json.MarshalIndent(scrubJSON(v), "", "  "); err == nil {
 			r.Body = string(b)
 		}
-	case "text", "xml":
+	default:
+		// text and xml, but also a body left behind by a switch to none, form or multipart.
 		r.Body = scrubBody(r.Body)
 	}
 	return r
