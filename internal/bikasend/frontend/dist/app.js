@@ -1769,20 +1769,33 @@ function settingsDialog() {
   h('label', {}, 'Font size', h('input', { type: 'number', min: '10', max: '20', value: String(s.fontSize), oninput: (e) => { s.fontSize = Number(e.target.value); } })),
   h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.saveHistory, onchange: (e) => { s.saveHistory = e.target.checked; } }), 'Save history to disk (secret-looking values are masked)'),
   h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.checkUpdates, onchange: (e) => { s.checkUpdates = e.target.checked; } }), 'Check for updates on start'),
-  h('label', { class: 'check gag' }, h('input', { type: 'checkbox', checked: true, onclick: (e) => {
-    // A joke setting: it cannot be turned off, and says so with a flash.
-    e.preventDefault();
-    const label = e.target.closest('label');
-    label.classList.remove('nope');
-    void label.offsetWidth;
-    label.classList.add('nope');
-  } }), 'I hate having to subscribe to use the software'),
   h('label', {}, 'Proxy (optional)', h('input', { type: 'text', value: s.proxy, placeholder: 'http://proxy.example.com:3128', oninput: (e) => { s.proxy = e.target.value; } })),
   h('label', {}, 'aws CLI path (optional)', h('input', { type: 'text', value: s.awsCli, placeholder: state.ws.aws.cli || 'not found', oninput: (e) => { s.awsCli = e.target.value; } })),
   h('div', { class: 'row-actions' },
     h('button', { class: 'btn', type: 'button', onclick: async () => { await call('ClearCookies'); toast('Cookies cleared'); } }, 'Clear cookies'),
     h('span', { class: 'muted small' }, 'Bikasend ' + state.ws.version)),
+  jokeSettings(),
   h('div', { class: 'buttons' }, h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'), h('button', { class: 'btn primary', type: 'submit' }, 'Save'))));
+}
+
+// jokeSettings are the "Very important settings". None of them is saved or changes anything.
+function jokeSettings() {
+  const replay = (el, cls) => {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  };
+  const subscribe = h('input', { type: 'checkbox', checked: true, onclick: (e) => { e.preventDefault(); replay(e.target.closest('label'), 'nope'); } });
+  const ads = h('input', { type: 'checkbox', onpointerenter: (e) => replay(e.target.closest('label'), 'dodge'), onclick: (e) => { e.preventDefault(); replay(e.target.closest('label'), 'dodge'); } });
+  const machine = h('input', { type: 'checkbox', onchange: (e) => toast(e.target.checked ? 'Now also works on yours.' : 'Still works on yours. We checked.') });
+  return h('fieldset', { class: 'jokes' }, h('legend', {}, 'Very important settings'),
+    h('label', { class: 'check gag' }, subscribe, 'I hate having to subscribe to use the software'),
+    h('label', { class: 'check gag ads' }, ads, 'Send my data to 420 advertising partners'),
+    h('div', { class: 'telemetry' }, h('span', {}, 'Telemetry'), h('span', { class: 'muted small' }, 'None'),
+      h('input', { type: 'range', min: '0', max: '1', step: '1', value: '0', 'aria-label': 'Telemetry', 'aria-valuetext': 'None' }),
+      h('span', { class: 'muted small' }, 'None')),
+    h('label', { class: 'check gag machine' }, machine, '“Works on my machine” mode'),
+    h('div', { class: 'row-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => toast('There is no cookie banner. There never was.') }, 'Close the cookie banner')));
 }
 
 function importDialog() {
