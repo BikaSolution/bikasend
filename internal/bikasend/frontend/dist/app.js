@@ -2166,6 +2166,10 @@ function shyCheckbox() {
     box.style.top = y + 'px';
   };
   const near = (e) => {
+    if (!box.isConnected) {
+      document.removeEventListener('pointermove', near);
+      return;
+    }
     const p = place();
     if (Math.hypot(e.clientX - (p.x + p.w / 2), e.clientY - (p.y + p.h / 2)) < 50) flee(e.clientX, e.clientY);
   };
