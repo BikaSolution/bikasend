@@ -175,7 +175,8 @@ deploy/site/         docker-compose: site + Cloudflare tunnel
 
 ```sh
 just release                  # shows the last release and suggests the next versions
-just release v0.2.0
+just release v0.2.0           # tags; CI builds every platform into a draft release
+just publish v0.2.0           # checks the build, signs the checksums, publishes
 ```
 
 It checks that you are on an up-to-date, clean `main` and that the version is new, runs vet and
@@ -184,9 +185,15 @@ the tests, and asks before it pushes. It then sets the app's version in `wails.j
 delete one.
 
 [`release.yml`](.github/workflows/release.yml) builds macOS, Windows and Linux on native
-runners and publishes a GitHub release with generated notes. The download site picks it up
-within 5 minutes. If GitHub has no macOS runner free, `retry-macos.yml` reruns that job, at
-most 3 times.
+runners into a draft release with generated notes. If GitHub has no macOS runner free,
+`retry-macos.yml` reruns that job, at most 3 times. `just publish` then checks that the workflow
+built each file (`gh attestation verify`) and that GitHub's digests match, signs
+`Bikasend-<tag>-SHA256SUMS` with the offline release key and publishes the release. The download
+site picks it up within 5 minutes. The app installs an update only when that signature checks
+out with the public key in [`cmd/bikasend/release.pub`](cmd/bikasend/release.pub).
+
+Make the signing key once with `just keygen` (it asks for a passphrase), back up the key file and
+the passphrase, and commit `cmd/bikasend/release.pub`.
 
 Before tagging, check that the site still describes the app correctly
 ([`90-website-audit.md`](.agents/rules/90-website-audit.md)).

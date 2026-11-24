@@ -101,6 +101,58 @@ release version="":
     git push -q origin "$v"
     echo "Pushed $v. Follow the build: gh run watch \$(gh run list -w release -L 1 --json databaseId --jq '.[0].databaseId')"
 
+# The private key never leaves this machine: back up the key file and the passphrase together
+# (a password manager). Commit cmd/bikasend/release.pub; every build after that checks it.
+[doc("Make the offline release signing key (once)")]
+keygen:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    key="${BIKASEND_SIGNING_KEY:-$HOME/.config/bikasend/release-signing.key}"
+    read -rs -p "New passphrase (12 or more characters): " p1; echo
+    read -rs -p "Same passphrase again: " p2; echo
+    [ "$p1" = "$p2" ] || { echo "the passphrases differ; nothing written"; exit 1; }
+    printf '%s\n' "$p1" | go run ./cmd/sign keygen -key "$key" -pub cmd/bikasend/release.pub
+    echo "Back up $key and its passphrase now. Then commit cmd/bikasend/release.pub."
+
+# Waits for the release build, checks that GitHub Actions built each file (provenance) and that
+# GitHub's digests match, signs SHA256SUMS with the offline key, then asks before it publishes.
+[doc("Sign and publish a draft release: just publish v0.3.0")]
+[positional-arguments]
+publish version="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    v="${1:-}"
+    [[ "$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "usage: just publish v1.2.3"; exit 1; }
+    key="${BIKASEND_SIGNING_KEY:-$HOME/.config/bikasend/release-signing.key}"
+    [ -f "$key" ] || { echo "no signing key at $key (just keygen, or set BIKASEND_SIGNING_KEY)"; exit 1; }
+    repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+    [ "$(gh release view "$v" --json isDraft --jq .isDraft)" = true ] || { echo "$v is not a draft release"; exit 1; }
+    run="$(gh run list -w release --branch "$v" -L 1 --json databaseId --jq '.[0].databaseId')"
+    echo "Waiting for the release build of $v..."
+    gh run watch "$run" --exit-status --interval 30 >/dev/null
+    dir="$(mktemp -d)"
+    trap 'rm -rf -- "$dir"' EXIT
+    gh release download "$v" -D "$dir" -p "Bikasend-$v-*.zip" -p "Bikasend-$v-modules.txt"
+    for f in "$dir"/*; do gh attestation verify "$f" --repo "$repo" >/dev/null; done
+    echo "Provenance: every file was built by this repo's release workflow."
+    sum() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+    gh release view "$v" --json assets --jq '.assets[] | select(.name | test("(zip|modules\\.txt)$")) | (.digest | ltrimstr("sha256:")) + "  " + .name' \
+      | (cd "$dir" && sum -c --quiet -)
+    echo "GitHub's digests match the files."
+    git show "$v:cmd/bikasend/release.pub" > "$dir/release.pub"
+    [ -s "$dir/release.pub" ] || { echo "the app at $v has no release key; run just keygen and release again"; exit 1; }
+    sums="$dir/Bikasend-$v-SHA256SUMS"
+    go run ./cmd/sign sums -out "$sums" "$dir"/Bikasend-"$v"-*.zip "$dir/Bikasend-$v-modules.txt"
+    cat "$sums"
+    read -rs -p "Passphrase for $key: " pass; echo
+    printf '%s\n' "$pass" | go run ./cmd/sign sign -key "$key" "$sums"
+    go run ./cmd/sign verify -pub "$dir/release.pub" "$sums"
+    read -r -p "Upload the signed checksums and publish $v? [y/N] " ok || ok=""
+    case "$ok" in y|Y) ;; *) echo "cancelled; $v stays a draft"; exit 1 ;; esac
+    gh release upload "$v" "$sums" "$sums.sig" --repo "$repo"
+    gh release edit "$v" --draft=false --latest --repo "$repo"
+    echo "Published $v. The site lists it within 5 minutes."
+
 # A private repo needs GITHUB_TOKEN: fine-grained, read-only Contents on the bikasend repo.
 [doc("Run the download site at http://localhost:8091")]
 site:

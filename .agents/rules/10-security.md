@@ -43,13 +43,17 @@ that crosses a boundary updates it in the same PR.
   site baked into the build, follows redirects only to that site and GitHub hosts, refuses a
   version that is not newer and a name that does not match the tag, checks the SHA-256 from
   `latest.json`, caps the size and saves with `os.Link`, which never overwrites a file.
-- **An update installs only on two matching hashes and a click.** GitHub's own release API (repo
-  baked into the build) must list the same SHA-256 as `latest.json`, so the update site alone
-  cannot push code. The user sees both hashes and clicks "Update and restart". `InstallUpdate`
+- **An update installs only on two matching hashes, a release signature and a click.** GitHub's
+  own release API (repo baked into the build) must list the same SHA-256 as `latest.json`, so the
+  update site alone cannot push code. The release's `SHA256SUMS` must carry a valid ed25519
+  signature from the offline release key (`cmd/bikasend/release.pub`), and list the file with that
+  hash, so the GitHub account alone cannot push code either. The private key stays encrypted on
+  the maintainer's machine; never put it, or its passphrase, in CI or the repo. The user sees the
+  hashes and clicks "Update and restart". `InstallUpdate`
   takes no path from the webview: it installs the file `DownloadUpdate` checked, hashes it again,
   unpacks only the expected names through `os.Root` (no links, no paths out, size and file caps)
-  and swaps it in with renames. A zip GitHub does not confirm (no repo, no answer, a draft or
-  prerelease, no digest, another hash) is deleted: the app saved it, so Gatekeeper and SmartScreen
+  and swaps it in with renames. A zip GitHub or the signature does not confirm (no repo, no key,
+  no answer, a draft or prerelease, no digest, another hash, no or a bad signature) is deleted: the app saved it, so Gatekeeper and SmartScreen
   would never check it. A confirmed zip the app cannot install (folder not writable) stays saved.
 - **Hosts lists change only on an explicit click** ("Always allow" when there is no list, or the
   environment editor). A host outside a non-empty list is refused; the send dialog only offers to
@@ -124,6 +128,9 @@ that crosses a boundary updates it in the same PR.
 - Workflows start with `permissions: {}` and grant the least each job needs.
 - Pass `${{ }}` values to `run:` through `env:`, never inline. Tag names are user input.
 - `actions/checkout` with `persist-credentials: false`. No shared Go cache in release builds.
+- Jobs that run third-party code (tests, `go install`, `wails build`) get read-only tokens. Only
+  the release's `publish` job can write, and it runs no project code: it downloads the build
+  artifacts, attests and uploads them to the draft. Pre-commit hooks are pinned to commit SHAs.
 - Pin tool versions (`wails@v2.17.1`), never `@latest`, in CI. `just security` is the exception: a
   scanner must be current.
 - Dependabot (`.github/dependabot.yml`) watches Go modules, Actions and the Docker base image.

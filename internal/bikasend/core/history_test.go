@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/BikaSolution/bikasend/pkg/github"
 	"github.com/BikaSolution/bikasend/pkg/sdk/bikasend"
+	"github.com/BikaSolution/bikasend/pkg/sign"
 )
 
 func TestScrubRequest(t *testing.T) {
@@ -107,6 +110,7 @@ func TestDownloadUpdate(t *testing.T) {
 	dir := t.TempDir()
 	s.opts.DownloadDir = dir
 	s.opts.GitHub = &fakeReleases{rel: github.Release{TagName: "v9.9.9", Assets: []github.Asset{{Name: name, Digest: "sha256:" + good}}}}
+	signRelease(t, s, name, payload)
 
 	s.opts.Version = "v9.9.9"
 	entry = dl(plat, name, good, "/downloads/v9.9.9/"+name)
@@ -118,7 +122,7 @@ func TestDownloadUpdate(t *testing.T) {
 	entry = dl(plat, name, good, "/downloads/v9.9.9/"+name)
 	for _, want := range []string{name, "Bikasend-v9.9.9-test-1.zip"} {
 		res, err := s.DownloadUpdate(context.Background())
-		if err != nil || res.Path != filepath.Join(dir, want) || res.SHA256 != good || res.SiteSHA256 != good || res.GitHubSHA256 != good {
+		if err != nil || res.Path != filepath.Join(dir, want) || res.SHA256 != good || res.SiteSHA256 != good || res.GitHubSHA256 != good || !res.Signed {
 			t.Fatalf("download = %+v, %v; want %s", res, err, want)
 		}
 		if data, _ := os.ReadFile(res.Path); string(data) != string(payload) {
@@ -161,6 +165,39 @@ func TestDownloadUpdate(t *testing.T) {
 type fakeReleases struct {
 	rel github.Release
 	err error
+	web *fakeWeb
+}
+
+// fakeWeb stands in for github.com release downloads: a SHA256SUMS file and its signature.
+type fakeWeb struct {
+	key       ed25519.PrivateKey
+	sums, sig []byte
+}
+
+// signRelease serves a signed SHA256SUMS that lists name with payload's hash, and gives s the key.
+func signRelease(t *testing.T, s *Service, name string, payload []byte) *fakeWeb {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	web := &fakeWeb{key: priv, sums: []byte(hex.EncodeToString(sum[:]) + "  " + name + "\n")}
+	web.sig = sign.Sign(priv, web.sums)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		file := map[string][]byte{
+			"/example/bikasend/releases/download/v9.9.9/Bikasend-v9.9.9-SHA256SUMS":     web.sums,
+			"/example/bikasend/releases/download/v9.9.9/Bikasend-v9.9.9-SHA256SUMS.sig": web.sig,
+		}[r.URL.Path]
+		if file == nil {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(file)
+	}))
+	t.Cleanup(srv.Close)
+	s.opts.ReleaseKey, s.opts.Repo, s.opts.GitHubWeb = pub, "example/bikasend", srv.URL
+	return web
 }
 
 func (f *fakeReleases) ReleaseByTag(context.Context, string) (github.Release, error) {
@@ -220,6 +257,7 @@ func TestInstallUpdate(t *testing.T) {
 		sum := sha256.Sum256(zipData)
 		gh := &fakeReleases{rel: github.Release{TagName: "v9.9.9", Assets: []github.Asset{{Name: name, Digest: "sha256:" + hex.EncodeToString(sum[:])}}}}
 		s.opts.GitHub = gh
+		gh.web = signRelease(t, s, name, zipData)
 		started := &[]string{}
 		s.opts.Start = func(goos, target string) error { *started = append(*started, goos+" "+target); return nil }
 		return s, gh, started
@@ -241,7 +279,7 @@ func TestInstallUpdate(t *testing.T) {
 		writeFile(t, exe, "old")
 		s, _, started := setup(t, "linux", exe, makeZip(t, zipEntry{"Bikasend", 0o755, "new"}))
 		res, err := s.DownloadUpdate(ctx)
-		if err != nil || !res.Installable || res.Target != exe || res.GitHubSHA256 != res.SHA256 || res.Reason != "" {
+		if err != nil || !res.Installable || !res.Signed || res.Target != exe || res.GitHubSHA256 != res.SHA256 || res.Reason != "" {
 			t.Fatalf("download = %+v, %v", res, err)
 		}
 		if err := s.InstallUpdate(ctx); err != nil {
@@ -318,6 +356,16 @@ func TestInstallUpdate(t *testing.T) {
 		{name: "a prerelease on GitHub", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.rel.Prerelease = true }},
 		{name: "no digest on GitHub", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.rel.Assets[0].Digest = "" }},
 		{name: "no GitHub repo", deleted: true, spoil: func(s *Service, _ *fakeReleases) { s.opts.GitHub = nil }},
+		{name: "no signature", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.web.sig = nil }},
+		{name: "a signature from another key", deleted: true, spoil: func(_ *Service, gh *fakeReleases) {
+			_, other, _ := ed25519.GenerateKey(rand.Reader)
+			gh.web.sig = sign.Sign(other, gh.web.sums)
+		}},
+		{name: "a signed list without this file", deleted: true, spoil: func(_ *Service, gh *fakeReleases) {
+			gh.web.sums = []byte(strings.Repeat("0", 64) + "  Bikasend-v9.9.9-other.zip\n")
+			gh.web.sig = sign.Sign(gh.web.key, gh.web.sums)
+		}},
+		{name: "no release key in the build", deleted: true, spoil: func(s *Service, _ *fakeReleases) { s.opts.ReleaseKey = nil }},
 		{name: "macOS outside a bundle", spoil: func(s *Service, _ *fakeReleases) { s.opts.GOOS, plat = "darwin", platformNames["darwin"] }},
 		{name: "no running app", spoil: func(s *Service, _ *fakeReleases) {
 			s.opts.Executable = func() (string, error) { return "", errors.New("unknown") }

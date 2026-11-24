@@ -218,6 +218,7 @@ type UpdateDownload struct {
 	SHA256       string `json:"sha256"`
 	SiteSHA256   string `json:"siteSha256"`
 	GitHubSHA256 string `json:"githubSha256"`
+	Signed       bool   `json:"signed"`
 	Target       string `json:"target"`
 	Installable  bool   `json:"installable"`
 	Reason       string `json:"reason"`

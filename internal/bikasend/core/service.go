@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -45,6 +46,9 @@ type Options struct {
 	DownloadDir string
 	// GitHub confirms update hashes; nil means the app only downloads updates.
 	GitHub     Releases
+	Repo       string                          // owner/name, for the signed checksums on GitHub
+	GitHubWeb  string                          // "" means https://github.com
+	ReleaseKey ed25519.PublicKey               // checks the release signature; empty refuses every update
 	Executable func() (string, error)          // nil means os.Executable
 	Start      func(goos, target string) error // nil means startApp
 	GOOS       string                          // "" means runtime.GOOS

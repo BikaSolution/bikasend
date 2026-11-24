@@ -1,5 +1,6 @@
-# Push a tag like v0.2.0 to build every platform and publish a GitHub release.
-# The download site reads releases from GitHub, so a new tag shows up there within 5 minutes.
+# Push a tag like v0.2.0 to build every platform into a draft GitHub release. The maintainer then
+# signs the checksums with the offline release key and publishes it (`just publish v0.2.0`); the
+# download site and the app ignore drafts.
 name: release
 
 on:
@@ -19,15 +20,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --generate-notes --verify-tag
 
+  # Builds run third-party code (tests, wails), so they get read access only; publish uploads.
   build:
     needs: create
     permissions:
-      contents: write
-      # Build provenance: GitHub signs a statement that this workflow built each file.
-      id-token: write
-      attestations: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -81,10 +80,9 @@ jobs:
           wails build -clean -skipbindings -trimpath -platform "$PLATFORM" ${TAGS:+-tags "$TAGS"} \
             -ldflags "-X main.version=$TAG -X main.updateURL=$SITE_URL -X main.repo=$REPO"
 
-      - name: Package and upload
+      - name: Package
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           NAME: ${{ matrix.name }}
         run: |
@@ -95,15 +93,43 @@ jobs:
             Windows) 7z a -tzip "$out" Bikasend.exe ;;
             Linux) zip "$out" Bikasend ;;
           esac
-          gh release upload "$TAG" "$out" --repo "$GITHUB_REPOSITORY"
           # One list of every Go module inside the app, so anyone can check what shipped.
           if [ "$RUNNER_OS" = "Linux" ]; then
             go version -m Bikasend > "Bikasend-${TAG}-modules.txt"
-            gh release upload "$TAG" "Bikasend-${TAG}-modules.txt" --repo "$GITHUB_REPOSITORY"
           fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.name }}
+          path: build/bikasend/bin/Bikasend-*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      # Build provenance: GitHub signs a statement that this workflow built each file.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
 
       # Anyone can check a download came from this workflow: gh attestation verify <file> --repo <owner/repo>
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: build/bikasend/bin/Bikasend-*
+          subject-path: dist/Bikasend-*
+
+      - name: Upload to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag must look like v1.2.3"; exit 1; }
+          gh release upload "$TAG" dist/Bikasend-"$TAG"-* --repo "$GITHUB_REPOSITORY"

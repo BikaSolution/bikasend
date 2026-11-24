@@ -1,6 +1,6 @@
 repos:
   - repo: "https://github.com/pre-commit/pre-commit-hooks"
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: check-merge-conflict
       - id: end-of-file-fixer
@@ -10,7 +10,7 @@ repos:
       - id: no-commit-to-branch
         args: ["-b", "main", "-b", "master"]
   - repo: "https://github.com/golangci/golangci-lint"
-    rev: v2.15.0
+    rev: 25c5369a93aacb8cccea0d46e1569ca4a194564d  # frozen: v2.15.0
     hooks:
       - id: golangci-lint
   - repo: local

@@ -18,3 +18,5 @@ internal/bikasend/frontend/wailsjs/
 .claude/settings*
 
 tmp/
+# Claude Code agent worktrees
+.claude/worktrees/

@@ -41,7 +41,7 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Refuses secret-looking values in `.bika.json` | FAQ | `guardFileValue` in `core/variables.go` |
 | JSON tree, search, timing, images, spec check; copy as cURL, PowerShell, HTTPie, JavaScript or Python, secrets as environment variables | Features | `app.js` `renderBody`; `core/validate.go`; `exporters` in `core/curl.go` |
 | Environments and hosts editor, "Always allow" for a host | README | `envPanel`, `send` in `app.js`; `CreateEnvironment`, `SetHosts` in `core/service.go` |
-| Version in the top bar, lights up for an update; update check at start (can be turned off), checked against the update site and GitHub, installed on a click | Features, FAQ, README | `renderVersion`, `versionClick`, `updateDialog` in `app.js`; `CheckUpdates` default in `core/service.go`; `CheckUpdate`, `DownloadUpdate`, `githubDigest`, `InstallUpdate` in `core/history.go`; `-X main.repo` in `release.yml` |
+| Version in the top bar, lights up for an update; update check at start (can be turned off), checked against the update site, GitHub and the release signature, installed on a click | Features, FAQ, README | `renderVersion`, `versionClick`, `updateDialog` in `app.js`; `CheckUpdates` default in `core/service.go`; `CheckUpdate`, `DownloadUpdate`, `githubDigest`, `checkSignature`, `InstallUpdate` in `core/history.go`; `pkg/sign`; `-X main.repo` in `release.yml` |
 | Path params highlighted, set from a hover card | README | `fillHighlight`, `showParamCard` in `app.js` |
 | The hero screenshot shows the current app | Hero | `static/app.webp`: retake it (generic example repo) when the UI changes |
 | Bodies pre-filled from examples, enums, defaults | Features | `example` in `core/swagger.go` |

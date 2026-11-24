@@ -122,13 +122,21 @@ Pick the version by what changed since the last tag:
 
 1. `just release v0.2.0`: checks the branch, tree and version, runs vet and tests, asks,
    bumps `productVersion` in `wails.json` if needed, then pushes the tag (UTC timestamps).
-2. `release.yml` creates the GitHub release with generated notes, builds on native macOS, Windows
-   and Linux runners with the version and the site URL (repository variable `SITE_URL`) baked in,
+2. `release.yml` creates a **draft** GitHub release with generated notes, builds on native
+   macOS, Windows and Linux runners (read-only token) with the version, the site URL (repository
+   variable `SITE_URL`), the repo and the release public key baked in, then a separate job attests
    and uploads `Bikasend-<tag>-<platform>.zip` plus `Bikasend-<tag>-modules.txt`. When GitHub
    assigns no macOS runner, `retry-macos.yml` reruns that job, at most 3 times.
-3. The site lists the newest 10 releases (drafts hidden) and refreshes every 5 minutes. GitHub
+3. **The human** runs `just publish v0.2.0`: it waits for the build, checks provenance
+   (`gh attestation verify`) and GitHub's digests, signs `Bikasend-<tag>-SHA256SUMS` with the
+   offline release key (passphrase asked; the key never leaves their machine), uploads it with its
+   `.sig`, and publishes the draft. Agents cannot do this step: it needs the passphrase. The app
+   installs only releases whose signed list holds the file's SHA-256 (`checkSignature`).
+   `just keygen` made the key once; `cmd/bikasend/release.pub` holds its public half. Never
+   change that file casually: installed apps would refuse every update signed with a new key.
+4. The site lists the newest 10 releases (drafts hidden) and refreshes every 5 minutes. GitHub
    provides the SHA-256 of every asset; the site shows it. The app asks `/latest.json` for updates.
-4. A download goes `/downloads/<tag>/<file>` → GitHub's short-lived signed URL. The site never
+5. A download goes `/downloads/<tag>/<file>` → GitHub's short-lived signed URL. The site never
    streams files and never exposes its token.
 
 Edit release notes on GitHub; the site renders headings, bullets and paragraphs.

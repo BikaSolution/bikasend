@@ -3,6 +3,7 @@ package core
 import (
 	"archive/zip"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/BikaSolution/bikasend/pkg/sdk/bikasend"
 	"github.com/BikaSolution/bikasend/pkg/sdk/site"
+	"github.com/BikaSolution/bikasend/pkg/sign"
 )
 
 func (s *Service) addHistory(r bikasend.Request, env string, out bikasend.Response) {
@@ -269,6 +271,7 @@ var (
 	maxUpdate     int64 = 300 << 20
 	updateName          = regexp.MustCompile(`^Bikasend-v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}-[a-z0-9-]{1,40}\.zip$`)
 	sha256Hex           = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	releaseTag          = regexp.MustCompile(`^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$`)
 	platformNames       = map[string]string{"darwin": "macOS", "windows": "Windows", "linux": "Linux"}
 )
 
@@ -360,6 +363,12 @@ func (s *Service) DownloadUpdate(ctx context.Context) (bikasend.UpdateDownload, 
 		return bikasend.UpdateDownload{}, fmt.Errorf("%w: GitHub did not confirm %s (%w); the file was removed, try again later or use the download page", bikasend.ErrUpdate, dl.Name, err)
 	}
 	out.GitHubSHA256 = gh
+	// The release key is offline with the maintainer: GitHub and the update site together cannot sign.
+	if err := s.checkSignature(ctx, latest.Tag, dl.Name, got); err != nil {
+		_ = os.Remove(dest)
+		return bikasend.UpdateDownload{}, fmt.Errorf("%w: %s is not signed with the release key (%w); the file was removed", bikasend.ErrUpdate, dl.Name, err)
+	}
+	out.Signed = true
 	out.Target, err = s.installTarget()
 	if err != nil {
 		out.Reason = err.Error()
@@ -370,6 +379,64 @@ func (s *Service) DownloadUpdate(ctx context.Context) (bikasend.UpdateDownload, 
 	s.pending = &pendingUpdate{path: dest, sha256: got, target: out.Target}
 	s.mu.Unlock()
 	return out, nil
+}
+
+// checkSignature fetches the release's SHA256SUMS and its signature from GitHub, checks the
+// signature with the key built into the app, and finds name with sha in the list.
+func (s *Service) checkSignature(ctx context.Context, tag, name, sha string) error {
+	owner, repo, ok := strings.Cut(s.opts.Repo, "/")
+	if len(s.opts.ReleaseKey) != ed25519.PublicKeySize || !ok || owner == "" || repo == "" {
+		return errors.New("this build has no release key")
+	}
+	if !releaseTag.MatchString(tag) {
+		return fmt.Errorf("unexpected tag %s", quoteStart(tag))
+	}
+	web := s.opts.GitHubWeb
+	if web == "" {
+		web = "https://github.com"
+	}
+	base, err := url.Parse(web)
+	if err != nil || base.Host == "" {
+		return fmt.Errorf("bad GitHub address %q", web)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	sumsName := "Bikasend-" + tag + "-SHA256SUMS"
+	fetch := func(file string) ([]byte, error) {
+		u := base.JoinPath(url.PathEscape(owner), url.PathEscape(repo), "releases", "download", url.PathEscape(tag), url.PathEscape(file))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := s.updateClient(base, 30*time.Second, true).Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("%s: %s", file, resp.Status)
+		}
+		return io.ReadAll(io.LimitReader(resp.Body, maxSignedFile))
+	}
+	sums, err := fetch(sumsName)
+	if err != nil {
+		return err
+	}
+	sig, err := fetch(sumsName + ".sig")
+	if err != nil {
+		return err
+	}
+	if err := sign.Verify(s.opts.ReleaseKey, sums, sig); err != nil {
+		return err
+	}
+	list, err := sign.ParseSums(sums)
+	if err != nil {
+		return err
+	}
+	if list[name] != sha {
+		return fmt.Errorf("the signed list does not hold %s with this SHA-256", name)
+	}
+	return nil
 }
 
 // linkNew links tmp into dir under name, or name-1, name-2 …; Link never replaces a file, even in a race.
@@ -421,6 +488,9 @@ type pendingUpdate struct {
 
 // rename is a variable so tests can make the swap fail.
 var rename = os.Rename
+
+// maxSignedFile caps SHA256SUMS and its signature; sign.ParseSums allows 64 KB.
+const maxSignedFile = 65 << 10
 
 // maxInstall caps the unpacked app; the zip itself is capped by maxUpdate.
 var maxInstall int64 = 200 << 20
