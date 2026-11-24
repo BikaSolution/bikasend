@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ var methods = []string{"get", "post", "put", "patch", "delete", "head", "options
 type docs struct {
 	fsys         fs.FS
 	cache        map[string]any
+	failed       map[string]error
 	scanLeft     int64
 	examplesLeft int
 
@@ -49,39 +51,104 @@ type opDetail struct {
 }
 
 func newDocs(fsys fs.FS) *docs {
-	return &docs{fsys: fsys, cache: map[string]any{}, scanLeft: maxScan, examplesLeft: maxExampleTotal}
+	return &docs{fsys: fsys, cache: map[string]any{}, failed: map[string]error{}, scanLeft: maxScan, examplesLeft: maxExampleTotal}
 }
+
+// preloadWorkers decode spec files at once; every decoded tree stays in the cache anyway.
+const preloadWorkers = 4
 
 func (d *docs) load(name string) (any, error) {
 	if v, ok := d.cache[name]; ok {
 		return v, nil
 	}
+	if err, ok := d.failed[name]; ok {
+		return nil, err
+	}
+	size, err := d.reserve(name)
+	if err != nil {
+		return nil, err
+	}
+	v, n, err := d.decode(name)
+	d.settle(name, size, v, n, err)
+	return v, err
+}
+
+// reserve takes a file's size from the folder budget before it is read.
+func (d *docs) reserve(name string) (int64, error) {
 	info, err := fs.Stat(d.fsys, name)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if info.Size() > maxSpec {
-		return nil, fmt.Errorf("file is %d MB, limit is %d MB", info.Size()>>20, maxSpec>>20)
+		return 0, fmt.Errorf("file is %d MB, limit is %d MB", info.Size()>>20, maxSpec>>20)
 	}
 	if info.Size() > d.scanLeft {
-		return nil, fmt.Errorf("the folder has more than %d MB of specs", maxScan>>20)
+		return 0, fmt.Errorf("the folder has more than %d MB of specs", maxScan>>20)
 	}
+	d.scanLeft -= info.Size()
+	return info.Size(), nil
+}
+
+// decode reads and parses one file. It touches only the file system, so it runs in parallel.
+func (d *docs) decode(name string) (any, int64, error) {
 	data, err := readCapped(d.fsys, name, maxSpec)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	d.scanLeft -= int64(len(data))
 	var v any
 	if isYAML(name) {
 		v, err = parseYAML(data)
 	} else {
 		err = json.Unmarshal(data, &v)
 	}
+	return v, int64(len(data)), err
+}
+
+// settle charges what was read instead of what Stat said, and records the result.
+func (d *docs) settle(name string, reserved int64, v any, n int64, err error) {
+	d.scanLeft += reserved - n
 	if err != nil {
-		return nil, err
+		d.failed[name] = err
+		return
 	}
 	d.cache[name] = v
-	return v, nil
+}
+
+// preload decodes files on a few cores. Budgets are reserved in file order first, so a folder
+// gives the same result on every scan; parse then finds the trees in the cache.
+func (d *docs) preload(files []string) {
+	type job struct {
+		name     string
+		reserved int64
+		v        any
+		n        int64
+		err      error
+	}
+	var jobs []*job
+	for _, f := range files {
+		if _, ok := d.cache[f]; ok {
+			continue
+		}
+		size, err := d.reserve(f)
+		if err != nil {
+			d.failed[f] = err
+			continue
+		}
+		jobs = append(jobs, &job{name: f, reserved: size})
+	}
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, min(preloadWorkers, runtime.GOMAXPROCS(0)))
+	for _, j := range jobs {
+		slots <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			j.v, j.n, j.err = d.decode(j.name)
+		})
+	}
+	wg.Wait()
+	for _, j := range jobs {
+		d.settle(j.name, j.reserved, j.v, j.n, j.err)
+	}
 }
 
 // readCapped reads at most limit bytes, so a file that grows after Stat cannot pass the cap.
@@ -242,13 +309,18 @@ func scanSpecs(fsys fs.FS) ([]bikasend.Spec, *docs, map[string]opDetail, error) 
 		return nil, nil, nil, errors.Join(bikasend.ErrScan, err)
 	}
 
-	d := newDocs(fsys)
-	specs := []bikasend.Spec{}
-	details := map[string]opDetail{}
+	var todo []string
 	for _, f := range files {
 		if isYAML(f) && slices.Contains(files, strings.TrimSuffix(strings.TrimSuffix(f, ".yaml"), ".yml")+".json") {
 			continue
 		}
+		todo = append(todo, f)
+	}
+	d := newDocs(fsys)
+	d.preload(todo)
+	specs := []bikasend.Spec{}
+	details := map[string]opDetail{}
+	for _, f := range todo {
 		spec, ops, err := d.parse(f)
 		if errors.Is(err, bikasend.ErrNotSpec) {
 			continue

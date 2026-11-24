@@ -293,6 +293,31 @@ func TestLoadLimits(t *testing.T) {
 	if _, err := readCapped(fstest.MapFS{"big.json": {Data: make([]byte, 11)}}, "big.json", 10); err == nil {
 		t.Error("readCapped must refuse a file over the limit")
 	}
+	// preload decodes in parallel but reserves the budget in file order: the same files fit every time.
+	files := fstest.MapFS{"broken.json": {Data: []byte(`{"a": `)}}
+	var names []string
+	for i := range 8 {
+		n := fmt.Sprintf("f%d.json", i)
+		files[n] = &fstest.MapFile{Data: []byte(`{"n": 1234}`)}
+		names = append(names, n)
+	}
+	for range 20 {
+		p := newDocs(files)
+		p.scanLeft = 11*4 + 6
+		p.preload(append([]string{"broken.json"}, names...))
+		for i, n := range names {
+			if _, cached := p.cache[n]; cached != (i < 4) {
+				t.Fatalf("%s cached = %v; budgets must go in file order", n, cached)
+			}
+		}
+		left := p.scanLeft
+		if _, err := p.load("broken.json"); err == nil || p.scanLeft != left {
+			t.Fatalf("a broken file keeps its error and is not read again: %v, budget %d → %d", err, left, p.scanLeft)
+		}
+		if _, err := p.load("f7.json"); err == nil || !strings.Contains(err.Error(), "MB of specs") {
+			t.Fatalf("a file past the folder budget: %v", err)
+		}
+	}
 }
 
 func FuzzParseJSON(f *testing.F) {
