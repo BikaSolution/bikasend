@@ -43,7 +43,7 @@ fuzz:
       cap=(systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0)
     fi
     for target in FuzzParseJSON FuzzParseYAML; do
-      "${cap[@]}" env GOMEMLIMIT=512MiB go test ./internal/bikasend/core/ -run '^$' -parallel 2 -fuzztime 2m -fuzz "$target"
+      ${cap[@]+"${cap[@]}"} env GOMEMLIMIT=512MiB go test ./internal/bikasend/core/ -run '^$' -parallel 2 -fuzztime 2m -fuzz "$target"
     done
 
 # @latest on purpose: an audit with a stale scanner misses new issues.

@@ -210,8 +210,8 @@ type Update struct {
 	URL       string `json:"url"`
 }
 
-// UpdateDownload is a saved update. Installable is false when GitHub could not confirm the hash
-// or the app cannot replace itself; Reason says why.
+// UpdateDownload is a saved update both the update site and GitHub confirmed. Installable is false
+// when the app cannot replace itself; Reason says why.
 type UpdateDownload struct {
 	Tag          string `json:"tag"`
 	Path         string `json:"path"`

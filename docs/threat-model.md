@@ -27,6 +27,9 @@ crosses one of the trust boundaries below (`10-security.md`).
                                │ webview ⇄ Go bridge (bound API) ◀─ the user
                                │ Go ─▶ aws CLI (no shell, args checked) ─▶ AWS
  internet ─▶ Cloudflare tunnel ─▶ site (rate limited, CSP) ─▶ GitHub API (token)
+ update site latest.json ──────▶ updater: SHA-256 must match     │
+ GitHub release API ───────────▶   both, then a click; unpack via │
+                               │   os.Root ─▶ replaces the app ◀── the user's click
 ```
 
 ## Threats and mitigations
