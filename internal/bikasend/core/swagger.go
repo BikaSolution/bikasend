@@ -9,9 +9,11 @@ import (
 	"maps"
 	"net/url"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -35,6 +37,9 @@ type docs struct {
 	cache        map[string]any
 	scanLeft     int64
 	examplesLeft int
+
+	mu       sync.Mutex
+	patterns map[string]*regexp.Regexp // nil value: invalid or too long, skipped
 }
 
 // opDetail keeps what response validation needs after the scan.
