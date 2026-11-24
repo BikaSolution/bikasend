@@ -45,7 +45,7 @@ const uiSpec = `{
   "servers": [{"url": "BACKEND"}],
   "components": {"securitySchemes": {"key": {"type": "apiKey", "in": "header", "name": "X-API-Key"}}},
   "security": [{"key": []}],
-  "paths": {"/items": {"get": {"summary": "List items", "tags": ["items"], "responses": {"200": {"description": "ok"}}}}}
+  "paths": {"/items/{id}": {"get": {"summary": "Get an item", "tags": ["items"], "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "ok"}}}}}
 }`
 
 type noAWS struct{}
@@ -433,10 +433,11 @@ func TestUI(t *testing.T) {
 	}
 
 	var mu sync.Mutex
-	var gotKey string
+	var gotKey, gotPath string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		gotKey = r.Header.Get("X-API-Key")
+		gotPath = r.URL.Path
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Echo", "yes")
@@ -542,9 +543,12 @@ func TestUI(t *testing.T) {
 
 	var url string
 	must("read the URL", d.eval(`document.querySelector('#request input.url').value`, &url))
-	if url != "{{baseUrl}}/items" {
-		t.Errorf("URL = %q, want {{baseUrl}}/items", url)
+	if url != "{{baseUrl}}/items/{id}" {
+		t.Errorf("URL = %q, want {{baseUrl}}/items/{id}", url)
 	}
+	waitFor("the empty path param is marked apart from variables", `(() => { const m = [...document.querySelectorAll('.urlbar .hl mark')]; return m.length === 2 && m[0].className === 'ok' && m[1].className === 'param empty' && m[1].textContent === '{id}'; })()`)
+	must("fill the path param", d.eval(`(() => { const i = document.querySelector('#request input[aria-label="Value of id"]'); i.value = '7'; i.dispatchEvent(new Event('input')); })()`, nil))
+	waitFor("the filled path param", `document.querySelector('.urlbar .hl mark.param').className === 'param'`)
 
 	clickText("show the request headers", "#request .subtabs", "Headers")
 	waitFor("the API key header row", `[...document.querySelectorAll('.headers-edit input[aria-label="Header name"]')].some((i) => i.value === 'X-API-Key')`)
@@ -576,6 +580,9 @@ func TestUI(t *testing.T) {
 	mu.Lock()
 	if gotKey != "k-123" {
 		t.Errorf("the backend got X-API-Key %q, want the saved secret", gotKey)
+	}
+	if gotPath != "/items/7" {
+		t.Errorf("the backend got path %q, want /items/7", gotPath)
 	}
 	mu.Unlock()
 	clickText("show the response headers", "#response .subtabs", "Headers")

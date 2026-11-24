@@ -10,7 +10,7 @@
   --accent: #0369a1; --accent-soft: #e0f2fe; --on-accent: #ffffff;
   --ok: #15803d; --warn: #b45309; --err: #b91c1c; --sel: #e0f2fe;
   --get: #15803d; --post: #b45309; --put: #1d4ed8; --patch: #7c3aed; --delete: #b91c1c;
-  --var-ok: #bae6fd; --var-secret: #ddd6fe; --var-missing: #fecaca;
+  --var-ok: #bae6fd; --var-secret: #ddd6fe; --var-missing: #fecaca; --var-param: #fde68a;
   --shadow: 0 8px 30px rgba(11, 22, 34, .18);
   --fs: 13px;
   color-scheme: light;
@@ -21,7 +21,7 @@
   --accent: #38bdf8; --accent-soft: #0c2a3e; --on-accent: #06141f;
   --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --sel: #0c2a3e;
   --get: #4ade80; --post: #fbbf24; --put: #60a5fa; --patch: #c084fc; --delete: #f87171;
-  --var-ok: #0c3b57; --var-secret: #3b2f63; --var-missing: #5b1d1d;
+  --var-ok: #0c3b57; --var-secret: #3b2f63; --var-missing: #5b1d1d; --var-param: #4a3a0c;
   --shadow: 0 8px 30px rgba(0, 0, 0, .5);
   color-scheme: dark;
 }
@@ -32,7 +32,7 @@
     --accent: #38bdf8; --accent-soft: #0c2a3e; --on-accent: #06141f;
     --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --sel: #0c2a3e;
     --get: #4ade80; --post: #fbbf24; --put: #60a5fa; --patch: #c084fc; --delete: #f87171;
-    --var-ok: #0c3b57; --var-secret: #3b2f63; --var-missing: #5b1d1d;
+    --var-ok: #0c3b57; --var-secret: #3b2f63; --var-missing: #5b1d1d; --var-param: #4a3a0c;
     --shadow: 0 8px 30px rgba(0, 0, 0, .5);
     color-scheme: dark;
   }
@@ -144,6 +144,8 @@ button:disabled { opacity: .55; cursor: default; }
 .hl mark { color: transparent; border-radius: 3px; background: var(--var-ok); }
 .hl mark.secret { background: var(--var-secret); }
 .hl mark.missing { background: var(--var-missing); }
+.hl mark.param { background: var(--var-param); }
+.hl mark.param.empty { outline: 1px dashed var(--warn); outline-offset: -1px; }
 .subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); flex: none; }
 .subtab { border: 0; border-radius: 0; background: none; padding: 5px 10px; color: var(--muted); border-bottom: 2px solid transparent; }
 .subtab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }

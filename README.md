@@ -40,8 +40,8 @@ don't use.
   variables.
 - **Bodies pre-filled** from the schema's examples, enums and defaults. Path and query
   parameters get their own form. JSON, text, XML, form and multipart (file upload) bodies.
-- **`{{variables}}` everywhere**, highlighted as you type, with autocomplete. Hover one to see where
-  it comes from, reveal a secret with a click, or open it in the AWS console.
+- **`{{variables}}` everywhere**, highlighted as you type, with autocomplete. Path params like `{id}` get their own colour,
+  outlined until filled in. Hover a variable to see where it comes from, reveal a secret with a click, or open it in the AWS console.
 - **Environments and shared variables.** A committed `.bika.json` holds environments (local,
   staging…) and variable definitions for the whole team; Bikasend creates it the first time you
   save a shared variable. Create and delete environments and edit their hosts in the variables

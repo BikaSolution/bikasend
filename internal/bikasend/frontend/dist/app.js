@@ -8,6 +8,8 @@ const MOD = isMac ? '⌘' : 'Ctrl+';
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const BODY_TYPES = [['none', 'None'], ['json', 'JSON'], ['text', 'Text'], ['xml', 'XML'], ['form', 'Form (urlencoded)'], ['multipart', 'Multipart (files)']];
 const VAR_RE = /\{\{\{\{[^{}]*\}\}\}\}|\{\{\s*([A-Za-z0-9_.$-]+)\s*\}\}/g;
+// Single-brace {param} matches pathParam in core/http.go.
+const URL_RE = /\{\{\{\{[^{}]*\}\}\}\}|\{\{\s*([A-Za-z0-9_.$-]+)\s*\}\}|\{([A-Za-z0-9_.-]+)\}/g;
 const KIND_LABELS = { text: 'Text', secret: 'Secret (this session only)', prompt: 'Ask me each session', aws: 'AWS Secrets Manager', ssm: 'AWS Parameter Store', env: 'Environment variable' };
 const SCOPE_LABELS = { session: 'Session', environment: 'Environment', folder: 'Folder', global: 'Global', spec: 'Spec' };
 
@@ -105,26 +107,31 @@ function usedVars(tab) {
   return used;
 }
 
-function fillHighlight(hl, text, tab) {
+function paramStatus(name, tab) {
+  const p = tab && (tab.req.pathParams || []).find((x) => x.name === name);
+  return p && p.value ? 'param' : 'param empty';
+}
+
+function fillHighlight(hl, text, tab, params) {
   hl.replaceChildren();
   let last = 0;
-  for (const m of text.matchAll(VAR_RE)) {
+  for (const m of text.matchAll(params ? URL_RE : VAR_RE)) {
     hl.append(text.slice(last, m.index));
-    hl.append(m[1] ? h('mark', { class: varStatus(m[1], tab) }, m[0]) : m[0]);
+    hl.append(m[1] ? h('mark', { class: varStatus(m[1], tab) }, m[0]) : m[2] ? h('mark', { class: paramStatus(m[2], tab) }, m[0]) : m[0]);
     last = m.index + m[0].length;
   }
   hl.append(text.slice(last) + '\n');
 }
 
 // varField is an input or textarea with {{variable}} highlighting and autocomplete.
-function varField({ value, multiline, placeholder, label, tab, onInput, className }) {
+function varField({ value, multiline, placeholder, label, tab, onInput, className, params }) {
   const hl = h('div', { class: 'hl', 'aria-hidden': 'true' });
   const input = multiline
     ? h('textarea', { spellcheck: 'false', placeholder, 'aria-label': label, value: value || '' })
     : h('input', { type: 'text', spellcheck: 'false', placeholder, 'aria-label': label, value: value || '', class: className });
   const wrap = h('div', { class: 'field' + (multiline ? '' : ' single') }, hl, input);
   const refresh = () => {
-    fillHighlight(hl, input.value, tab);
+    fillHighlight(hl, input.value, tab, params);
     hl.scrollTop = input.scrollTop;
     hl.scrollLeft = input.scrollLeft;
   };
@@ -154,6 +161,11 @@ function varField({ value, multiline, placeholder, label, tab, onInput, classNam
   input.addEventListener('blur', () => setTimeout(hideComplete, 150));
   refresh();
   return wrap;
+}
+
+function refreshURLMarks() {
+  const f = document.querySelector('.urlbar .field');
+  if (f && f._refresh) f._refresh();
 }
 
 function refreshVarMarks() {
@@ -644,7 +656,7 @@ function renderRequest() {
 
   const method = h('select', { 'aria-label': 'Method', onchange: (e) => { r.method = e.target.value; tab.dirty = true; renderTabs(); } },
     METHODS.map((m) => h('option', { value: m, selected: m === r.method }, m)));
-  const url = varField({ value: r.url, label: 'URL', placeholder: 'https://…', tab, className: 'url', onInput: (v) => { r.url = v; renderTabs(); } });
+  const url = varField({ value: r.url, label: 'URL', placeholder: 'https://…', tab, className: 'url', params: true, onInput: (v) => { r.url = v; renderTabs(); } });
   const sendBtn = h('button', { id: 'sendBtn', class: 'btn primary', title: `Send (${MOD}Enter)`, onclick: () => send(tab) }, 'Send');
   el.append(h('div', { class: 'urlbar' }, method, url, sendBtn, exportSelect()));
   renderRequestButton();
@@ -677,7 +689,7 @@ function paneParams(pane, tab, op) {
         const d = docs.get('path:' + p.name);
         return h('tr', {},
           h('td', { title: (d && d.description) || '' }, h('span', { class: 'mono' }, p.name), h('span', { class: 'req-mark', title: 'Required' }, '*')),
-          h('td', {}, varField({ value: p.value, label: 'Value of ' + p.name, tab, onInput: (v) => { p.value = v; } })));
+          h('td', {}, varField({ value: p.value, label: 'Value of ' + p.name, tab, onInput: (v) => { p.value = v; refreshURLMarks(); } })));
       }))));
   }
   const tbody = h('tbody');
