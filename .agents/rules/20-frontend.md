@@ -24,7 +24,7 @@
   attributes: the CSP blocks them. The one exception is the `application/ld+json` data block
   in `index.html` for search engines: data the browser never runs, every value filled by
   `html/template`, which escapes it as JSON.
-- No external fonts, images or CSS: the CSP allows only `'self'`. Static files live in
+- No external fonts, images, video or CSS: the CSP allows only `'self'` for each. Static files live in
   `internal/site/api/static/` and are served from `/static/{name}` (allowlisted at start-up).
   Link them with `{{static "name"}}`: the URL carries the file's hash, so a deploy is never hidden
   by a cached old copy. Only `OpenSans.woff2` keeps a fixed URL, because `site.css` loads it.

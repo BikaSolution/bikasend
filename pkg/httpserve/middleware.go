@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	csp         = "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	csp         = "default-src 'none'; style-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 	permissions = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=()"
 	maxLogPath  = 200
 )

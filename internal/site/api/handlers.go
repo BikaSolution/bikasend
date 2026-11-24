@@ -380,8 +380,12 @@ func staticHandler(name string) http.Handler {
 			return
 		}
 		w.Header().Set("Cache-Control", "public, max-age=86400")
-		if strings.HasSuffix(embedded, ".webmanifest") {
+		switch path.Ext(embedded) {
+		case ".webmanifest":
 			w.Header().Set("Content-Type", "application/manifest+json")
+		case ".webm":
+			// Go's built-in table lacks webm and the scratch image has no mime.types.
+			w.Header().Set("Content-Type", "video/webm")
 		}
 		http.ServeFileFS(w, r, templates, embedded)
 	})

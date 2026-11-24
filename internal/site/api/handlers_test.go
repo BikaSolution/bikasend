@@ -225,6 +225,7 @@ func TestHandlers(t *testing.T) {
 		{name: "favicon", path: "/favicon.ico", wantStatus: http.StatusOK},
 		{name: "stylesheet", path: "/static/site.css", wantStatus: http.StatusOK, contentType: "text/css; charset=utf-8", contains: []string{"--accent: #0369a1", ".card h3.card-title"}},
 		{name: "static font", path: "/static/OpenSans.woff2", wantStatus: http.StatusOK},
+		{name: "demo clip", path: "/static/demo.webm", wantStatus: http.StatusOK, contentType: "video/webm"},
 		{name: "static unknown file", path: "/static/handlers.go", wantStatus: http.StatusNotFound},
 		{name: "static traversal", path: "/static/..%2Ftemplates%2Findex.html", wantStatus: http.StatusNotFound},
 		{name: "unknown page", path: "/admin", wantStatus: http.StatusNotFound},

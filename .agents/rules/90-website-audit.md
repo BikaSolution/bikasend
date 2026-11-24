@@ -47,6 +47,7 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Copy a tree node's value or path; diff against the tab's previous response | README | `jsonTree`, `renderDiff`, `lineDiff` in `app.js` |
 | Tabs come back after a restart or update, secret-looking values masked, can be turned off | README | `saveTabs`, `restoreTabs`, `updateDialog`, `settingsDialog` in `app.js`; `LoadTabs`, `SaveTabs`, `cleanTabs` in `core/service.go`; `scrubRequest` in `core/history.go` |
 | The hero screenshot shows the current app | Hero | `static/app.webp`: retake it (generic example repo) when the UI changes |
+| The demo clip (`static/demo.webm`) shows the current app; its alt text matches what happens | How it works | Re-record it (generic example repo, no welcome screen: it lists local paths) when the UI changes |
 | Bodies pre-filled from examples, enums, defaults | Features | `example` in `core/swagger.go` |
 | Path, query, header params and auth headers set up | Features | `operation` in `core/swagger.go` |
 | Secrets stay in memory, never on disk or in logs | Features | `store` in `app.js` (no secrets); `scrubRequest` in `core/history.go`; `10-security.md` |

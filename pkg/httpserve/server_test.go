@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const wantCSP = "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+const wantCSP = "default-src 'none'; style-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 func TestServer(t *testing.T) {
 	var router Router

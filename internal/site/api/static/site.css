@@ -72,6 +72,7 @@ h1 { font-size: clamp(36px, 5vw, 54px); line-height: 1.08; letter-spacing: -.035
 .visual { position: relative; }
 .mascot { position: absolute; left: -36px; bottom: -92px; width: 168px; height: auto; z-index: 2; filter: drop-shadow(0 12px 24px rgba(0,0,0,.25)); pointer-events: none; }
 .shot { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow-lg); }
+.clip { display: block; width: 100%; max-width: 960px; height: auto; margin: 48px auto 0; border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow-lg); background: var(--bg); }
 .m.GET { color: var(--get); } .m.POST { color: var(--post); } .m.PUT { color: var(--put); } .m.DELETE { color: var(--delete); }
 
 /* Sections */
