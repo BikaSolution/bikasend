@@ -34,7 +34,9 @@ that crosses a boundary updates it in the same PR.
   secret values (`guardFileValue` refuses secret-looking names with plain text).
 - **Secrets stay in Go memory.** Session values, prompts, AWS values and OAuth2 tokens are never
   logged, written to disk, put in `localStorage` or sent to the webview. Views are masked; reveal
-  and copy are explicit clicks. History on disk is opt-in and masks secret-looking values.
+  and copy are explicit clicks. History on disk is opt-in and masks secret-looking values. Open
+  tabs on disk (`tabs.json`, off in Settings) go through the same masking in Go, keep no upload
+  paths or send confirmations, and the previous response for Diff stays in memory.
 - **Secret guards on every send:** the environment's `hosts` list (also for the OAuth2 token
   URL, which needs one); with no list, only loopback or a host the user confirms on that send; no
   secret over plain http without a confirmation; no redirect with a secret to another host or from
@@ -59,8 +61,8 @@ that crosses a boundary updates it in the same PR.
   Python), the method included, and turns secrets into `BIKASEND_` environment variables. It
   refuses rather than risks: a secret in any form, control or bidi characters, values HTTPie would
   read as files. curl text fields use `--form-string`, and URLs `--globoff`.
-- **Uploads come from the file dialog only.** A spec, cURL import or history entry never chooses a
-  local file. `addFile` accepts only paths recorded by `PickFile` in this session.
+- **Uploads come from the file dialog only.** A spec, cURL import, history entry or restored tab
+  never chooses a local file. `addFile` accepts only paths recorded by `PickFile` in this session.
 - **The aws CLI is called without a shell.** Every ID, profile and region matches a pattern that
   cannot start with `-`. Never pass user text to `exec` any other way.
 - **Untrusted text stays text.** Swagger content and HTTP responses go into the DOM with
@@ -70,12 +72,14 @@ that crosses a boundary updates it in the same PR.
 - **No remote code in the webview.** No CDN scripts, no remote fonts, no iframes. Everything ships
   embedded. The CSP meta tag in `index.html` allows `'self'` only: no inline scripts or styles.
 - **Bounded reads.** Responses (`maxBody`), specs (`maxSpec`), all specs in a folder (`maxScan`),
-  uploads (`maxUpload`), `.bika.json` (`maxConfig`) and aws CLI output are capped. Keep a cap on
-  anything new.
+  uploads (`maxUpload`), `.bika.json` (`maxConfig`), `tabs.json` (`maxTabsFile`, `maxTabs`,
+  `maxTabFolders`, `maxTabBody`) and aws CLI output are capped. Keep a cap on anything new.
 - **Bounded work.** A small hostile file must not cost unbounded memory or time. YAML nesting
   (`maxYAMLDepth`), path keys (`maxPathKey`, no control or format characters), generated
-  examples (`maxExampleNodes`, `maxExampleTotal`) and response checks (`maxChecks`) have limits.
-  Every loop over untrusted input must consume input on each pass.
+  examples (`maxExampleNodes`, `maxExampleTotal`, also spent by body hints, `maxHints`) and
+  response checks (`maxChecks`) have limits. In the webview, the JSON body colours and
+  suggestions (`MAX_JSON_TEXT`, `MAX_JSON_TOKENS`) and the response diff (`MAX_DIFF_LINES`,
+  `MAX_DIFF_CELLS`) have limits. Every loop over untrusted input must consume input on each pass.
 - **The webview never hands Go a URL to open for a secret.** `OpenSecretSource` takes a variable
   name; Go builds the AWS console URL from the stored reference (`SecretConsoleURL`), with a fixed
   host and a region that must match an AWS region pattern.
