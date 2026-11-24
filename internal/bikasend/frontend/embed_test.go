@@ -564,6 +564,13 @@ func TestUI(t *testing.T) {
 	must("check for updates", d.eval(`document.querySelector('#versionBtn').click()`, nil))
 	waitFor("a dev build says it does not check", `document.querySelector('#toast').textContent === 'This build does not check for updates.'`)
 
+	must("open settings", d.eval(`document.querySelector('#settingsBtn').click()`, nil))
+	waitFor("the subscription box is ticked", `(() => { const l = document.querySelector('#dialog label.gag'); return !!l && l.querySelector('input').checked; })()`)
+	must("try to untick it", d.eval(`document.querySelector('#dialog label.gag input').click()`, nil))
+	waitFor("it flashes and stays ticked", `(() => { const l = document.querySelector('#dialog label.gag'); return l.classList.contains('nope') && l.querySelector('input').checked; })()`)
+	clickText("close settings", "#dialog", "Cancel")
+	waitFor("settings close", `!document.querySelector('#dialog').open`)
+
 	// Hover {id} in the URL and set it from its card.
 	var paramAt []float64
 	must("find the path param", d.eval(`(() => { const r = document.querySelector('.urlbar .hl mark.param').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`, &paramAt))

@@ -1769,6 +1769,14 @@ function settingsDialog() {
   h('label', {}, 'Font size', h('input', { type: 'number', min: '10', max: '20', value: String(s.fontSize), oninput: (e) => { s.fontSize = Number(e.target.value); } })),
   h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.saveHistory, onchange: (e) => { s.saveHistory = e.target.checked; } }), 'Save history to disk (secret-looking values are masked)'),
   h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.checkUpdates, onchange: (e) => { s.checkUpdates = e.target.checked; } }), 'Check for updates on start'),
+  h('label', { class: 'check gag' }, h('input', { type: 'checkbox', checked: true, onclick: (e) => {
+    // A joke setting: it cannot be turned off, and says so with a flash.
+    e.preventDefault();
+    const label = e.target.closest('label');
+    label.classList.remove('nope');
+    void label.offsetWidth;
+    label.classList.add('nope');
+  } }), 'I hate having to subscribe to use the software'),
   h('label', {}, 'Proxy (optional)', h('input', { type: 'text', value: s.proxy, placeholder: 'http://proxy.example.com:3128', oninput: (e) => { s.proxy = e.target.value; } })),
   h('label', {}, 'aws CLI path (optional)', h('input', { type: 'text', value: s.awsCli, placeholder: state.ws.aws.cli || 'not found', oninput: (e) => { s.awsCli = e.target.value; } })),
   h('div', { class: 'row-actions' },
