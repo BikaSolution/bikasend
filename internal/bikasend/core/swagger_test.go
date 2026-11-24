@@ -128,6 +128,7 @@ func TestParse(t *testing.T) {
 		"longpath/openapi.json":       {Data: []byte(`{"openapi":"3.0.0","paths":{"/` + strings.Repeat("?", maxPathKey) + `":{}}}`)},
 		"ctlpath/openapi.json":        {Data: []byte(`{"openapi":"3.0.0","paths":{"/a\n":{}}}`)},
 		"bidipath/openapi.json":       {Data: []byte(`{"openapi":"3.0.0","paths":{"/b\u202e":{}}}`)},
+		"zwsppath/openapi.json":       {Data: []byte(`{"openapi":"3.0.0","paths":{"/items\u200b":{}}}`)},
 	}
 	specs, _, ops, err := scanSpecs(fsys)
 	if err != nil {
@@ -142,17 +143,23 @@ func TestParse(t *testing.T) {
 		paths = append(paths, p)
 	}
 	slices.Sort(paths)
-	want := []string{"api/pets/openapi.json", "api/swagger.json", "badref/openapi.json", "bidipath/openapi.json", "broken/swagger.json", "ctlpath/openapi.json", "fanout/openapi.json", "hidden/openapi.json", "longpath/openapi.json", "twin/swagger.json", "yaml/swagger.yaml"}
+	want := []string{"api/pets/openapi.json", "api/swagger.json", "badref/openapi.json", "bidipath/openapi.json", "broken/swagger.json", "ctlpath/openapi.json", "fanout/openapi.json", "hidden/openapi.json", "longpath/openapi.json", "twin/swagger.json", "yaml/swagger.yaml", "zwsppath/openapi.json"}
 	if !reflect.DeepEqual(paths, want) {
 		t.Fatalf("specs = %v, want %v", paths, want)
 	}
 	if byPath["broken/swagger.json"].Error == "" || byPath["badref/openapi.json"].Error == "" || byPath["hidden/openapi.json"].Error == "" {
 		t.Error("broken spec, ref outside the folder and ref to a hidden file must report an error")
 	}
-	for _, name := range []string{"longpath/openapi.json", "ctlpath/openapi.json", "bidipath/openapi.json"} {
-		if e := byPath[name].Error; e == "" || len(e) > 200 || strings.Contains(e, "/a\n") || strings.ContainsRune(e, '\u202e') {
+	for _, name := range []string{"longpath/openapi.json", "ctlpath/openapi.json", "bidipath/openapi.json", "zwsppath/openapi.json"} {
+		if e := byPath[name].Error; e == "" || len(e) > 200 || strings.Contains(e, "/a\n") || strings.ContainsAny(e, "\u202e\u200b") {
 			t.Errorf("%s: a long or control-character path must fail with a short, clean error, got %d bytes: %q", name, len(e), e)
 		}
+	}
+	if e := byPath["longpath/openapi.json"].Error; !strings.Contains(e, `"…`) {
+		t.Errorf("a cut path must end in an ellipsis: %q", e)
+	}
+	if e := byPath["bidipath/openapi.json"].Error; !strings.Contains(e, "U+202E at byte 2") {
+		t.Errorf("the error must name the refused character: %q", e)
 	}
 	if f := byPath["fanout/openapi.json"]; f.Error != "" || len(f.Operations) != 1 || f.Operations[0].Body == "" || len(f.Operations[0].Body) > 1<<20 {
 		t.Errorf("fan-out spec must get a bounded example: error %q, body %d bytes", f.Error, len(f.Operations[0].Body))

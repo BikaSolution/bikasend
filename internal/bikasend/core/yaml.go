@@ -328,7 +328,7 @@ func unquote(s string) (string, error) {
 	}
 	v, err := strconv.Unquote(strings.ReplaceAll(s, `\/`, "/"))
 	if err != nil {
-		return "", fmt.Errorf("%w: bad quoted string %s", errYAML, s)
+		return "", fmt.Errorf("%w: bad quoted string %s", errYAML, quoteStart(s))
 	}
 	return v, nil
 }

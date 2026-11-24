@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/BikaSolution/bikasend/pkg/sdk/bikasend"
 )
@@ -105,22 +106,22 @@ func (d *docs) deref(file string, v any) (any, string, error) {
 		target, ptr, _ := strings.Cut(r, "#")
 		if target != "" {
 			if strings.Contains(target, "://") {
-				return nil, file, fmt.Errorf("remote $ref %q is not supported", r)
+				return nil, file, fmt.Errorf("remote $ref %s is not supported", quoteStart(r))
 			}
 			file = path.Join(path.Dir(file), target)
 			if !fs.ValidPath(file) {
-				return nil, file, fmt.Errorf("$ref %q points outside the folder", r)
+				return nil, file, fmt.Errorf("$ref %s points outside the folder", quoteStart(r))
 			}
 			if !refTarget(file) {
-				return nil, file, fmt.Errorf("$ref %q must point to a visible .json, .yaml or .yml file", r)
+				return nil, file, fmt.Errorf("$ref %s must point to a visible .json, .yaml or .yml file", quoteStart(r))
 			}
 		}
 		root, err := d.load(file)
 		if err != nil {
-			return nil, file, fmt.Errorf("$ref %q: %w", r, err)
+			return nil, file, fmt.Errorf("$ref %s: %w", quoteStart(r), err)
 		}
 		if v, err = pointer(root, ptr); err != nil {
-			return nil, file, fmt.Errorf("$ref %q: %w", r, err)
+			return nil, file, fmt.Errorf("$ref %s: %w", quoteStart(r), err)
 		}
 	}
 	return nil, file, errors.New("$ref chain is too long")
@@ -308,15 +309,25 @@ func (d *docs) parse(file string) (bikasend.Spec, map[string]opDetail, error) {
 	return spec, ops, nil
 }
 
-// checkPathKey refuses paths that would flood the UI or hide text; the error quotes only the start.
+// checkPathKey refuses paths that would flood the UI or look like another path.
 func checkPathKey(p string) error {
 	if len(p) > maxPathKey {
-		return fmt.Errorf("path %.40q… is %d bytes, limit is %d", p, len(p), maxPathKey)
+		return fmt.Errorf("path %s is %d bytes, limit is %d", quoteStart(p), len(p), maxPathKey)
 	}
-	if strings.ContainsFunc(p, unicode.IsControl) || unsafeRune(p) != 0 || strings.ContainsAny(p, "\u2028\u2029") {
-		return fmt.Errorf("path %.40q has a control or bidi character", p)
+	for i, r := range p {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' {
+			return fmt.Errorf("path %s has character %U at byte %d", quoteStart(p), r, i)
+		}
 	}
 	return nil
+}
+
+// quoteStart quotes untrusted text for an error message, cut to 40 runes.
+func quoteStart(s string) string {
+	if utf8.RuneCountInString(s) <= 40 {
+		return strconv.Quote(s)
+	}
+	return fmt.Sprintf("%.40q…", s)
 }
 
 func servers(doc map[string]any, swagger2 bool) []string {
