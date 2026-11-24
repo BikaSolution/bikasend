@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{template "meta" .}}
+</head>
+<body>
+{{template "header" .}}
+
+<main>
+<section>
+  <div class="wrap docs">
+    <div class="section-head">
+      <h1>Documentation</h1>
+      <p>How to use Bikasend, what it reads and where your secrets go. It is a small app, so this is one page.</p>
+    </div>
+    <div class="docs-layout">
+      <nav class="toc card" aria-label="On this page">
+        <h2 class="toc-title">On this page</h2>
+        <ol>
+          <li><a href="#start">Getting started</a></li>
+          <li><a href="#files">Which files it reads</a></li>
+          <li><a href="#variables">Variables and scopes</a></li>
+          <li><a href="#bika-json">The .bika.json file</a></li>
+          <li><a href="#secrets">Secrets and hosts</a></li>
+          <li><a href="#export">Copy as code</a></li>
+          <li><a href="#updates">Updates</a></li>
+          <li><a href="#shortcuts">Keyboard shortcuts</a></li>
+        </ol>
+      </nav>
+
+      <div class="doc">
+        <article id="start">
+          <h2>Getting started</h2>
+          <ol>
+            <li><strong>Download</strong> the zip for your system from the <a href="/#download">download section</a> and unzip it. Compare its SHA-256 with the one shown next to the file: <code>shasum -a 256 &lt;file&gt;</code> on macOS and Linux, <code>Get-FileHash &lt;file&gt;</code> in PowerShell.</li>
+            <li><strong>Run it once.</strong> Builds are not signed yet, so your system warns the first time.
+              <ul>
+                <li>macOS: move <code>Bikasend.app</code> to Applications, open it and close the warning. Go to <strong>System Settings → Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>. On macOS 14 and earlier you can right-click the app and choose <strong>Open</strong>.</li>
+                <li>Windows: choose <strong>More info → Run anyway</strong>. If the window stays blank, install the Microsoft Edge WebView2 runtime. It comes with Windows 11.</li>
+                <li>Linux: install GTK 3 and WebKitGTK 4.1 with <code>sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0</code> or <code>sudo dnf install gtk3 webkit2gtk4.1</code>.</li>
+              </ul>
+            </li>
+            <li><strong>Open a folder.</strong> Click <strong>Open folder…</strong> and pick a repo. Bikasend lists every operation it finds, grouped by tag, and opens the last folder again when it starts. If the folder has a <code>.bika.json</code>, Bikasend asks you to <a href="#bika-json">trust it</a> first.</li>
+            <li><strong>Pick an operation.</strong> Filter by path or summary, toggle methods, or paste a URL to find its operation. The URL, parameters, headers and an example body come filled in. Pick an environment to fill the variables.</li>
+            <li><strong>Send.</strong> Press <kbd>⌘</kbd> <kbd>Enter</kbd> or <kbd>Ctrl</kbd> <kbd>Enter</kbd>; press it again to cancel. You see the status, time, size, headers and body, and every place the response breaks the spec’s schema.</li>
+          </ol>
+        </article>
+
+        <article id="files">
+          <h2>Which files it reads</h2>
+          <p>When you open a folder, Bikasend looks at every file below it and parses the ones that match all of these:</p>
+          <ul>
+            <li>The name contains <code>swagger</code> or <code>openapi</code>, in any case, and ends in <code>.json</code>, <code>.yaml</code> or <code>.yml</code>. For example <code>openapi.yaml</code> or <code>docs/example-service.swagger.json</code>.</li>
+            <li>The file has a top-level <code>swagger</code> field (Swagger 2.0) or <code>openapi</code> field (OpenAPI 3.0 and 3.1). Other matching files are left out quietly.</li>
+            <li>It is not inside a folder named <code>.git</code>, <code>node_modules</code> or <code>vendor</code>.</li>
+            <li>It is not a YAML file with a JSON twin: when <code>openapi.yaml</code> and <code>openapi.json</code> sit side by side, only the JSON file is read.</li>
+          </ul>
+          <p>Every read goes through the opened folder, so nothing outside it is read, not even through a symbolic link. A <code>$ref</code> can point into the same file or to another file in the folder by a relative path. The target must be a <code>.json</code>, <code>.yaml</code> or <code>.yml</code> file whose path has no hidden (dot) part. Remote <code>$ref</code> URLs are refused.</p>
+          <p>The YAML reader handles block and flow collections, scalars and block scalars. It refuses anchors, tags and files with more than one document.</p>
+          <p>A file can be at most 20 MB, and all specs in a folder together at most 200 MB. A file that fails to parse shows its error on its own entry; the other files still load. Bikasend reloads when a spec it found or <code>.bika.json</code> changes on disk. A new spec file shows up when you rescan the folder (<strong>↻</strong>).</p>
+          <p>From the folder, Bikasend reads only these specs, the files their <code>$ref</code>s point to, <code>.bika.json</code>, the TLS files it names, and files you pick yourself for an upload.</p>
+        </article>
+
+        <article id="variables">
+          <h2>Variables and scopes</h2>
+          <p>Write <code>{{"{{name}}"}}</code> anywhere in a request: the URL, a header, a parameter or the body. Bikasend fills it in just before it sends. It looks the name up in four scopes, the narrowest first, and the first hit wins:</p>
+          <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Scope</th><th scope="col">Lives in</th><th scope="col">Shared</th></tr></thead>
+            <tbody>
+              <tr><td>Session</td><td>The app’s memory, gone when you quit</td><td>No</td></tr>
+              <tr><td>Environment</td><td><code>.bika.json</code> → <code>environments.&lt;name&gt;.variables</code></td><td>Yes, through git</td></tr>
+              <tr><td>Folder</td><td><code>.bika.json</code> → <code>variables</code></td><td>Yes, through git</td></tr>
+              <tr><td>Global</td><td>Your own <code>globals.json</code> in the <code>Bikasend</code> folder of your user config folder</td><td>No</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <p>When no scope defines <code>{{"{{baseUrl}}"}}</code>, Bikasend uses the spec’s server. A spec with more than one server gets a picker, and Bikasend remembers your choice per spec.</p>
+          <p>A value can use other variables, up to 10 levels deep; a loop is an error. A name that no scope defines stops the send and says which one is missing. To send the literal text <code>{{"{{text}}"}}</code>, write <code>{{"{{{{text}}}}"}}</code>. Names use letters, digits, <code>.</code>, <code>_</code> and <code>-</code>, up to 64 characters.</p>
+          <p>Press <kbd>⌘</kbd> <kbd>E</kbd> or <kbd>Ctrl</kbd> <kbd>E</kbd> to open the variables panel. Hover a variable in a request to see where its value comes from.</p>
+        </article>
+
+        <article id="bika-json">
+          <h2>The .bika.json file</h2>
+          <p><code>.bika.json</code> sits at the top of the opened folder and is meant to be committed, so the whole team shares the same environments. It holds where a secret lives, never the secret. Bikasend creates it, with a <code>local</code> environment, the first time you save a shared variable, an environment or a host.</p>
+          <p>Bikasend ignores the file until you click <strong>Trust</strong>. Trust pins the file’s exact content (its SHA-256). Your own edits in Bikasend keep the trust; when anything else changes the file, Bikasend asks again. Review it like code first, because it decides which secrets load and which hosts get them. A file larger than 1 MB, or one that is a symbolic link, is refused.</p>
+          <h3>A complete example</h3>
+<pre><code>{
+  "variables": {
+    "tenant": "demo"
+  },
+  "environments": {
+    "local": {
+      "hosts": ["localhost:8080"],
+      "variables": {
+        "baseUrl": "http://localhost:8080",
+        "api_key": { "prompt": "Local API key" }
+      }
+    },
+    "staging": {
+      "hosts": ["api.staging.example.com", "*.auth.example.com"],
+      "aws": { "profile": "staging", "region": "eu-west-1" },
+      "timeoutSeconds": 30,
+      "followRedirects": false,
+      "tls": {
+        "caFile": "certs/staging-ca.pem",
+        "certFile": "certs/client.pem",
+        "keyFile": "certs/client-key.pem"
+      },
+      "oauth2": {
+        "tokenUrl": "https://login.auth.example.com/oauth2/token",
+        "clientId": "example-client",
+        "clientSecret": "{{"{{client_secret}}"}}",
+        "scopes": ["items.read"]
+      },
+      "variables": {
+        "baseUrl": "https://api.staging.example.com",
+        "api_key": { "aws": "example-service/api-keys", "key": "bikasend" },
+        "client_secret": { "ssm": "/example-service/client-secret" },
+        "ci_token": { "env": "EXAMPLE_TOKEN" }
+      }
+    },
+    "signed": {
+      "hosts": ["*.execute-api.eu-west-1.amazonaws.com"],
+      "aws": { "profile": "staging", "region": "eu-west-1" },
+      "sigv4": { "service": "execute-api" }
+    }
+  }
+}</code></pre>
+          <h3>Top level</h3>
+          <dl>
+            <dt><code>variables</code></dt><dd>Folder variables, used in every environment.</dd>
+            <dt><code>environments</code></dt><dd>One entry per environment. The name uses letters, digits, <code>.</code>, <code>_</code> and <code>-</code>. Bikasend picks <code>local</code> first when it exists, and remembers your last environment per folder. A name that starts with <code>prod</code> asks before every send.</dd>
+          </dl>
+          <h3>Environment fields</h3>
+          <dl>
+            <dt><code>hosts</code></dt><dd>The hosts that may receive secrets, such as <code>api.example.com</code>, <code>localhost:8080</code> or <code>*.example.com</code>. <code>*.example.com</code> matches every name under <code>example.com</code>, but not <code>example.com</code> itself. A wildcard needs at least two labels after it, so <code>*.com</code> is refused. With a list, loopback hosts must be listed too. See <a href="#secrets">Secrets and hosts</a>.</dd>
+            <dt><code>variables</code></dt><dd>Environment variables. They win over folder variables of the same name.</dd>
+            <dt><code>aws</code></dt><dd><code>profile</code> and <code>region</code> for the <code>aws</code> CLI when Bikasend loads secrets or signs requests.</dd>
+            <dt><code>timeoutSeconds</code></dt><dd>0 to 600. Left out or 0 means 2 minutes.</dd>
+            <dt><code>followRedirects</code></dt><dd><code>true</code> or <code>false</code>. Left out means Bikasend follows up to 10 redirects.</dd>
+            <dt><code>tls</code></dt><dd><code>caFile</code> adds a CA to the system ones; <code>certFile</code> and <code>keyFile</code> are a client certificate. Paths are relative and stay inside the folder; absolute paths and <code>..</code> are refused.</dd>
+            <dt><code>oauth2</code></dt><dd>Client credentials: <code>tokenUrl</code> and <code>clientId</code> are required, plus <code>clientSecret</code> and <code>scopes</code>. All of them can use variables, so keep the secret in a variable that points to AWS or asks for it. The token URL must be https (http only on loopback), and its host must be in <code>hosts</code>. Bikasend keeps the token in memory until it expires.</dd>
+            <dt><code>sigv4</code></dt><dd>AWS Signature V4: <code>service</code> is required; <code>region</code> falls back to the one in <code>aws</code>. Bikasend signs with the credentials of the <code>aws</code> profile.</dd>
+          </dl>
+          <p>You pick OAuth2 or SigV4 per request in its auth settings. Any other field is an error, so a typo shows up at once. There is no proxy field: a proxy is a personal setting in the app.</p>
+          <h3>Variable values</h3>
+          <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Form</th><th scope="col">Value</th></tr></thead>
+            <tbody>
+              <tr><td><code>"demo"</code></td><td>Plain text, sent as written.</td></tr>
+              <tr><td><code>{"prompt": "Label"}</code></td><td>Bikasend asks for the value once per session and keeps it in memory.</td></tr>
+              <tr><td><code>{"aws": "secret-id"}</code></td><td>An AWS Secrets Manager secret. Add <code>"key": "name"</code> to read one field of a JSON secret.</td></tr>
+              <tr><td><code>{"ssm": "/parameter/name"}</code></td><td>An AWS Systems Manager Parameter Store parameter.</td></tr>
+              <tr><td><code>{"env": "NAME"}</code></td><td>An environment variable of the Bikasend process. It must be set and not empty.</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <p>Each object form takes exactly one source. Everything except plain text counts as a secret.</p>
+          <p>Bikasend refuses plain text under a name that looks secret, in <code>.bika.json</code> and in <code>globals.json</code>. A name looks secret when it contains <code>key</code>, <code>token</code>, <code>secret</code>, <code>password</code>, <code>passwd</code>, <code>credential</code>, <code>auth</code>, <code>cookie</code> or <code>private</code>, unless it ends in <code>url</code>, <code>uri</code>, <code>host</code>, <code>endpoint</code> or <code>path</code>. A value made only of <code>{{"{{references}}"}}</code> is fine. <code>globals.json</code> holds <code>variables</code> only, no environments.</p>
+        </article>
+
+        <article id="secrets">
+          <h2>Secrets and hosts</h2>
+          <p>Secrets come from four places: values you type into the session, prompts, environment variables, and AWS Secrets Manager or Parameter Store. AWS values load into memory through your own <code>aws</code> CLI and its login. Click <strong>Load secrets</strong>, or <strong>Sign in with AWS SSO</strong> when you are signed out. Bikasend runs the CLI without a shell. When you switch environment, it forgets the AWS values it loaded.</p>
+          <p>Secrets stay in the app’s memory. They are not written to disk or to a log, and the window shows them masked until you click <strong>Reveal</strong>. History is kept in memory unless you turn on saving in Settings; on disk, secret-looking values are masked. When a server echoes a request’s secret back, Bikasend masks it in the response.</p>
+          <p>Before every request that carries a secret, Bikasend checks where it goes:</p>
+          <ul>
+            <li><strong>With a hosts list</strong>, a secret goes only to a listed host. A host outside the list is blocked; you can open the hosts editor, then send again.</li>
+            <li><strong>Without a hosts list</strong>, a secret goes to loopback hosts (<code>localhost</code>, <code>127.0.0.1</code>, <code>::1</code>, <code>*.localhost</code>) without asking. For any other host, Bikasend asks: <strong>Send once</strong>, or <strong>Always allow</strong> to add the host to the environment’s list.</li>
+            <li><strong>Plain http</strong> to a host other than loopback needs your confirmation on each send.</li>
+            <li><strong>Redirects</strong>: a request with a secret does not follow a redirect to another host, or from https to http.</li>
+          </ul>
+          <p>The checks matter because a request URL can come from a spec file that anyone with access to the repo can change.</p>
+        </article>
+
+        <article id="export">
+          <h2>Copy as code</h2>
+          <p>Use <strong>Copy as…</strong> on a request, or the command palette, to copy it as cURL, PowerShell, HTTPie, JavaScript <code>fetch</code> or Python <code>requests</code>. Variables are filled in, and every part is quoted for its language.</p>
+          <p>Secrets never reach the clipboard. Each one becomes an environment variable with a <code>BIKASEND_</code> prefix, such as <code>$BIKASEND_API_KEY</code>, and a comment at the top lists the ones to set. Bikasend refuses to copy a request when a secret would still show up, for example URL-escaped or too short to replace, or when the text holds control or bidirectional characters. OAuth2 and SigV4 are not copied; a note says what to add.</p>
+        </article>
+
+        <article id="updates">
+          <h2>Updates</h2>
+          <p>When it starts, Bikasend asks this site whether a newer version is out. You can turn that off in Settings; it is the only call the app makes on its own. When an update is out, the version in the top bar changes to <strong>Update to …</strong>. Click it to download the build for your system into your Downloads folder, or your home folder if there is none.</p>
+          <p>Before it offers to install, Bikasend checks the file’s SHA-256 twice:</p>
+          <ol>
+            <li>against the hash this site lists, and</li>
+            <li>against the hash GitHub lists for the release.</li>
+          </ol>
+          <p>If GitHub can’t confirm the file, Bikasend deletes it. When both match, it shows you the hashes, and <strong>Update and restart</strong> replaces the app and starts the new one. Open request tabs close. If Bikasend cannot replace the app where it runs, it says why; unzip the saved file and replace the app yourself.</p>
+          <p>Bikasend only updates to a newer version, from the site built into it.</p>
+        </article>
+
+        <article id="shortcuts">
+          <h2>Keyboard shortcuts</h2>
+          <p>On macOS use <kbd>⌘</kbd>; on Windows and Linux use <kbd>Ctrl</kbd>.</p>
+          <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Keys</th><th scope="col">Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>⌘</kbd> <kbd>Enter</kbd></td><td>Send the request, or cancel it while it runs</td></tr>
+              <tr><td><kbd>⌘</kbd> <kbd>K</kbd></td><td>Command palette</td></tr>
+              <tr><td><kbd>⌘</kbd> <kbd>E</kbd></td><td>Open or close the variables panel</td></tr>
+              <tr><td><kbd>⌘</kbd> <kbd>T</kbd></td><td>New request tab</td></tr>
+              <tr><td><kbd>⌘</kbd> <kbd>F</kbd></td><td>Find in the response</td></tr>
+              <tr><td><kbd>⌘</kbd> <kbd>+</kbd> / <kbd>⌘</kbd> <kbd>−</kbd></td><td>Larger or smaller text</td></tr>
+              <tr><td><kbd>⌘</kbd> <kbd>0</kbd></td><td>Reset the text size</td></tr>
+              <tr><td><kbd>⌘</kbd>-click a variable</td><td>Edit that variable</td></tr>
+              <tr><td><kbd>Esc</kbd></td><td>Close the variables panel or a variable card</td></tr>
+            </tbody>
+          </table>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+{{template "footer" .}}
+</body>
+</html>

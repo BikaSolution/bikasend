@@ -104,6 +104,9 @@ that crosses a boundary updates it in the same PR.
   the tunnel alone. Never add `ports:` to the compose file.
 - Keep the DoS limits in `pkg/httpserve`: server timeouts, the header cap, the in-flight cap and
   capped log paths. Work per request stays O(1) under the limiter's lock.
+- `/healthz` is public: it answers a fixed `ok` with `no-store`. It never shows a version or
+  config and never calls GitHub. The Docker health check runs `/site -healthcheck` against
+  `127.0.0.1`, because the `scratch` image has no curl.
 - GitHub is a shared, rate-limited resource: keep the release cache, the failure back-off and the
   signed-URL cache. A visitor's request never triggers more than one GitHub call.
 - Download redirects go only to `https` URLs on `github.com` or `*.githubusercontent.com`.

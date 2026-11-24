@@ -19,7 +19,7 @@
 
 ## Download site (`internal/site/api/templates/`)
 
-- `layout.html` (shared head, header, footer, notes), `index.html`, `changelog.html`, embedded
+- `layout.html` (shared head, header, footer, notes), `index.html`, `changelog.html`, `docs.html`, embedded
   with `//go:embed`. CSS lives in `static/site.css`. No JS, no `<style>` blocks, no `style=`
   attributes: the CSP blocks them. The one exception is the `application/ld+json` data block
   in `index.html` for search engines: data the browser never runs, every value filled by

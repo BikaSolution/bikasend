@@ -70,6 +70,8 @@ const (
 	indexDescription = "Free, open-source API client and Postman alternative for macOS, Windows and Linux. Open a repo, pick an operation from its Swagger or OpenAPI files, send it."
 	changelogTitle   = "Changelog: Bikasend"
 	changelogDesc    = "Every Bikasend release with its notes, downloads and SHA-256 checksums."
+	docsTitle        = "Docs: Bikasend"
+	docsDesc         = "How to use Bikasend: the files it reads, variables and environments, the .bika.json format, secrets and hosts, copy as code, updates and keyboard shortcuts."
 )
 
 type siteLinks struct {
@@ -139,6 +141,19 @@ func changelogHandler(svc site.Service, links siteLinks) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := pages.ExecuteTemplate(w, "changelog.html", data); err != nil {
 			slog.Error("render changelog", "error", err)
+		}
+	})
+}
+
+func docsHandler(svc site.Service, links siteLinks) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data := newPage(links, docsTitle, docsDesc, "/docs")
+		if releases, err := svc.Releases(r.Context()); err == nil && len(releases) > 0 {
+			data.Latest = &releases[0]
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := pages.ExecuteTemplate(w, "docs.html", data); err != nil {
+			slog.Error("render docs", "error", err)
 		}
 	})
 }
@@ -311,6 +326,7 @@ func sitemapHandler(svc site.Service, links siteLinks) http.Handler {
 		set := sitemapURLSet{URLs: []sitemapURL{
 			{Loc: links.publicURL + "/", LastMod: lastMod},
 			{Loc: links.publicURL + "/changelog", LastMod: lastMod},
+			{Loc: links.publicURL + "/docs", LastMod: lastMod},
 		}}
 		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")

@@ -180,3 +180,38 @@ footer nav { gap: 8px 20px; flex-wrap: wrap; }
 .files li { margin: 0 0 10px; }
 .files .name { margin-left: 6px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 .files .sha { display: block; font-size: 11.5px; color: var(--muted); word-break: break-all; }
+
+/* Docs: a sticky contents list beside one long column */
+.wrap.docs { max-width: 1040px; }
+.docs-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; align-items: start; }
+.toc { position: sticky; top: 88px; display: block; padding: 20px 22px; }
+.toc-title { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc li { margin: 6px 0; }
+.toc a { color: var(--text-soft); font-size: 14.5px; }
+.toc a:hover { color: var(--accent); }
+.doc article { scroll-margin-top: 88px; padding-bottom: 40px; margin-bottom: 40px; border-bottom: 1px solid var(--line); }
+.doc article:last-child { border-bottom: 0; margin-bottom: 0; }
+.doc h2 { font-size: clamp(24px, 3vw, 28px); letter-spacing: -.02em; line-height: 1.2; margin: 0 0 16px; }
+.doc h3 { font-size: 17px; margin: 28px 0 10px; }
+.doc p, .doc li, .doc dd { color: var(--text-soft); font-size: 15.5px; }
+.doc p { margin: 0 0 14px; }
+.doc ol, .doc ul { margin: 0 0 14px; padding-left: 22px; }
+.doc li { margin: 6px 0; }
+.doc li ul { margin: 8px 0 0; }
+.doc strong, .doc dt { color: var(--text); }
+.doc code { overflow-wrap: anywhere; }
+.doc p code, .doc li code, .doc dd code, .doc td code { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.doc pre { margin: 0 0 16px; padding: 16px 18px; overflow-x: auto; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; line-height: 1.5; }
+.doc pre code { overflow-wrap: normal; white-space: pre; color: var(--text); }
+.doc dl { margin: 0 0 14px; }
+.doc dt { margin: 14px 0 2px; font-weight: 600; }
+.doc dd { margin: 0; }
+.doc table { margin: 0 0 16px; }
+.doc td { padding-right: 16px; }
+.table-wrap { overflow-x: auto; }
+
+@media (max-width: 900px) {
+  .docs-layout { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .toc { position: static; }
+}

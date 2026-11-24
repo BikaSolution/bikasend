@@ -36,6 +36,7 @@ func Routes(svc site.Service, opts Options) httpserve.Router {
 	router.AddMiddleware(httpserve.RateLimit(pagesPerMinute, pagesBurst))
 	router.Get("/{$}", indexHandler(svc, links))
 	router.Get("/changelog", changelogHandler(svc, links))
+	router.Get("/docs", docsHandler(svc, links))
 	router.Get("/feed.xml", feedHandler(svc))
 	router.Get("/robots.txt", robotsHandler(links))
 	router.Get("/sitemap.xml", sitemapHandler(svc, links))

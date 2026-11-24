@@ -112,6 +112,7 @@ Bikasend ignores a folder's `.bika.json` until you trust it, and asks again when
 Secrets are only sent to the hosts the environment lists. With no list, any other host needs your
 confirmation (loopback is exempt): send once, or "Always allow" to add it to the environment's
 hosts. `oauth2` needs a `hosts` list. Press `⌘E` to edit variables, environments and hosts.
+The [docs page](https://send.bikasolutions.co.za/docs) lists every `.bika.json` field.
 
 ## Download
 
@@ -208,6 +209,15 @@ TUNNEL_TOKEN=… GITHUB_TOKEN=… docker compose -f deploy/site/docker-compose.y
 
 The container is read-only, runs as a non-root user with no capabilities, and has memory, CPU,
 process and log-size limits. It publishes no ports: only the tunnel can reach it.
+
+**Uptime.** `GET /healthz` answers `ok` with `Cache-Control: no-store`. It makes no GitHub call
+and shows no version. The image has no curl, so the compose health check runs the binary itself
+(`/site -healthcheck`, a 3 s GET of `http://127.0.0.1:8091/healthz`) every 30 seconds. The tunnel
+starts once the site is healthy, and `docker compose ps` shows the state. For a check from
+outside, point a monitor at `https://send.bikasolutions.co.za/healthz` (or your own site's
+address). For example, an UptimeRobot free-plan keyword monitor that looks for `ok`, or a
+Cloudflare health check if your plan has one. The monitor uses `GET` or `HEAD`, so the WAF rule
+below lets it through.
 
 The site limits each client, caps concurrent requests, times out slow clients and backs off when
 GitHub is down. Cloudflare stops floods before they reach the tunnel. Set these in its dashboard:
