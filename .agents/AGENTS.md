@@ -116,9 +116,9 @@ Pick the version by what changed since the last tag:
   `v0.2.1`.
 - **A breaking change**, one that changes how the system works for people already using it:
   major bump, minor and patch to 0. Examples: a `.bika.json` or settings format old files no
-  longer load in, a new required tool or account (adding the `aws` CLI integration was this
-  kind of change), dropping a platform, or removing a feature people rely on. Ask the human
-  before a major bump.
+  longer load in, a new way of working such as the `aws` CLI integration, a new required tool
+  or account, dropping a platform, or removing a feature people rely on. Ask the human before a
+  major bump.
 
 1. `make release VERSION=v0.2.0`: checks the branch, tree and version, runs vet and tests, asks,
    bumps `productVersion` in `wails.json` if needed, then pushes the tag (UTC timestamps).
