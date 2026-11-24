@@ -92,7 +92,7 @@ The docs page goes deeper than the index, so it goes stale faster. Check every r
 | Created with a `local` environment on the first shared save | .bika.json | `editFile`, `starterConfig` in `core/service.go` |
 | Trust pins the SHA-256, own edits keep it; 1 MB cap; symlink refused | .bika.json | `trusted`, `loadFolder`, `editFile` in `core/service.go` |
 | `local` picked first; `prod…` asks before a send | .bika.json | `firstEnv`, `workspace` (`Production`) in `core/service.go`; `send` in `app.js` |
-| OAuth2: https token URL, host in `hosts`, token kept until it expires | .bika.json | `oauthToken` in `core/http.go` |
+| OAuth2: https token URL, host in `hosts`, clientSecret only as a variable, token kept until it expires | .bika.json | `oauthToken` in `core/http.go`; `parseConfig` in `core/variables.go` |
 | SigV4: `service` required, region falls back to `aws` | .bika.json | `parseConfig` in `core/variables.go`; `signV4` in `core/http.go` |
 | Variable forms, one source each, non-text is secret | .bika.json | `varValue.UnmarshalJSON`, `isSecretKind` in `core/variables.go` |
 | Secret-looking names and their exceptions | .bika.json | `secretName`, `guardFileValue`, `isOnlyReference` in `core/variables.go` |
@@ -101,7 +101,7 @@ The docs page goes deeper than the index, so it goes stale faster. Check every r
 | Masked until Reveal; history in memory unless saved, masked on disk; echoes masked | Secrets | `app.js` var card and history text; `saveHistory` in `core/history.go`; `mask` in `core/variables.go` |
 | Hosts list, loopback exemption, Send once / Always allow, plain http, redirects | Secrets | `guard`, `CheckRedirect` in `core/http.go`; `isLoopback` in `core/variables.go`; `send` in `app.js` |
 | Five export formats, `BIKASEND_` variables, refusals, auth notes | Copy as code | `exporters`, `Export`, `envVarName`, `unsafeRune`, `exportNotes` in `core/curl.go`; `EXPORTS` in `app.js` |
-| Update check on start, off in Settings; saved to Downloads; two SHA-256 checks; delete when GitHub can't confirm; install and restart | Updates | `CheckUpdate`, `DownloadUpdate`, `downloadDir`, `InstallUpdate` in `core/history.go`; `start`, `updateDialog` in `app.js` |
+| Update check on start, off in Settings; saved to Downloads; two SHA-256 checks and the release signature; delete when any fails; install and restart | Updates | `CheckUpdate`, `DownloadUpdate`, `downloadDir`, `checkSignature`, `InstallUpdate` in `core/history.go`; `start`, `updateDialog` in `app.js` |
 | Keyboard shortcuts | Keyboard shortcuts | `keydown` handler in `wire` and the `welcome` text in `app.js` |
 | `/healthz` and the Docker health check | README (Download site) | `AddGenericHealthCheck`, `CheckHealth` in `pkg/httpserve/server.go`; `deploy/site/docker-compose.yml` |
 
