@@ -191,7 +191,7 @@ func (p *yamlParser) mapping(indent int) (any, error) {
 			return nil, p.errorf("expected \"key: value\"")
 		}
 		if _, dup := out[key]; dup {
-			return nil, p.errorf("duplicate key %q", key)
+			return nil, p.errorf("duplicate key %s", quoteStart(key))
 		}
 		p.pos++
 		switch {

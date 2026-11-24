@@ -153,17 +153,17 @@ func pointer(root any, ptr string) (any, error) {
 		case map[string]any:
 			next, ok := n[part]
 			if !ok {
-				return nil, fmt.Errorf("%q not found", part)
+				return nil, fmt.Errorf("%s not found", quoteStart(part))
 			}
 			v = next
 		case []any:
 			i, err := strconv.Atoi(part)
 			if err != nil || i < 0 || i >= len(n) {
-				return nil, fmt.Errorf("index %q out of range", part)
+				return nil, fmt.Errorf("index %s out of range", quoteStart(part))
 			}
 			v = n[i]
 		default:
-			return nil, fmt.Errorf("%q not found", part)
+			return nil, fmt.Errorf("%s not found", quoteStart(part))
 		}
 	}
 	return v, nil
