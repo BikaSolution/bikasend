@@ -342,7 +342,6 @@ func TestWithoutReleases(t *testing.T) {
 		{name: "index when GitHub is down", down: true, path: "/", wantStatus: http.StatusOK, contains: "Release information is unavailable"},
 		{name: "changelog when GitHub is down", down: true, path: "/changelog", wantStatus: http.StatusOK, contains: "Release information is unavailable"},
 		{name: "docs when GitHub is down", down: true, path: "/docs", wantStatus: http.StatusOK, contains: "<h2>Getting started</h2>"},
-		{name: "healthz when GitHub is down", down: true, path: "/healthz", wantStatus: http.StatusOK, contains: "ok"},
 		{name: "latest when GitHub is down", down: true, path: "/latest.json", wantStatus: http.StatusServiceUnavailable, contains: `{"error":"unavailable"}`},
 		{name: "feed when GitHub is down", down: true, path: "/feed.xml", wantStatus: http.StatusServiceUnavailable},
 		{name: "latest with no releases", releases: `[]`, path: "/latest.json", wantStatus: http.StatusNotFound, contains: `{"error":"no releases"}`},

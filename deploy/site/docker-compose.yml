@@ -30,6 +30,7 @@ services:
       - GITHUB_TOKEN
       - GOMEMLIMIT=200MiB
     # The image is FROM scratch (no curl), so the binary gets its own /healthz on 127.0.0.1:8091.
+    # It uses the default -port; add the same -port here if command: ever sets one.
     healthcheck:
       test: ["CMD", "/site", "-healthcheck"]
       interval: 30s

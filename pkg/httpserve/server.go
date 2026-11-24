@@ -64,8 +64,7 @@ func (s *httpserver) Close() error {
 	return s.server.Shutdown(ctx)
 }
 
-// AddGenericHealthCheck answers /healthz, and the older /health, with a fixed "ok": no version and
-// no upstream call, so a public monitor learns nothing and costs nothing.
+// AddGenericHealthCheck answers /healthz with a fixed "ok". It shows no version and calls nothing upstream.
 func (r *Router) AddGenericHealthCheck() {
 	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -73,7 +72,6 @@ func (r *Router) AddGenericHealthCheck() {
 		_, _ = io.WriteString(w, healthBody)
 	})
 	r.Get(healthPath, health)
-	r.Get("/health", health)
 }
 
 // CheckHealth gets /healthz from the server on addr. The site image has no curl, so the binary
@@ -96,7 +94,7 @@ func CheckHealth(ctx context.Context, addr string) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK || string(body) != healthBody {
-		return fmt.Errorf("health check: status %d", resp.StatusCode)
+		return fmt.Errorf("health check: status %d, body %q", resp.StatusCode, body)
 	}
 	return nil
 }

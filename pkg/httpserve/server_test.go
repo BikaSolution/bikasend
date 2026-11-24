@@ -47,11 +47,10 @@ func TestServer(t *testing.T) {
 		wantNoStore bool
 	}{
 		{name: "healthz", method: http.MethodGet, path: "/healthz", wantStatus: http.StatusOK, wantBody: "ok", wantNoStore: true},
-		{name: "older health path", method: http.MethodGet, path: "/health", wantStatus: http.StatusOK, wantBody: "ok", wantNoStore: true},
 		{name: "group route with path value", method: http.MethodGet, path: "/v1/item/42", wantStatus: http.StatusOK, wantBody: "42", wantGroup: true},
 		{name: "panic recovers to 500", method: http.MethodGet, path: "/v1/panic", wantStatus: http.StatusInternalServerError, wantBody: "internal server error\n", wantGroup: true},
 		{name: "unknown path", method: http.MethodGet, path: "/nope", wantStatus: http.StatusNotFound},
-		{name: "wrong method", method: http.MethodPost, path: "/health", wantStatus: http.StatusMethodNotAllowed},
+		{name: "wrong method", method: http.MethodPost, path: "/healthz", wantStatus: http.StatusMethodNotAllowed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
