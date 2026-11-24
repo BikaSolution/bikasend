@@ -291,12 +291,13 @@ mark.find.current { background: #f97316; }
 .dialog fieldset.jokes legend { padding: 0 4px; color: var(--muted); font-size: .9em; }
 .dialog label.gag { border-radius: 6px; margin: 0 -6px; padding: 2px 6px; }
 .dialog label.gag.nope { animation: nope .9s ease-out; }
-.dialog label.gag.dodge input { animation: dodge .8s ease-in-out; }
+.dialog label.gag .shy-slot { display: inline-block; width: 16px; height: 16px; flex: none; }
+.dialog input.shy { margin: 0; }
+.dialog input.shy.fleeing { position: fixed; z-index: 100; transition: left .15s ease-out, top .15s ease-out; }
 .dialog .telemetry { display: flex; align-items: center; gap: 8px; color: var(--soft); }
 .dialog .telemetry input[type=range] { flex: 1; }
 @keyframes nope { 15%, 45% { background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 18px var(--accent); } }
-@keyframes dodge { 25%, 60% { transform: translate(36px, -8px) rotate(14deg); } }
-@media (prefers-reduced-motion: reduce) { .dialog label.gag.nope, .dialog label.gag.dodge input { animation-duration: .01s; } }
+@media (prefers-reduced-motion: reduce) { .dialog label.gag.nope { animation-duration: .01s; } .dialog input.shy.fleeing { transition: none; } }
 .dialog textarea { min-height: 140px; }
 .palette input { width: 100%; font-size: 1.1em; padding: 8px 10px; }
 .palette-list { max-height: 50vh; overflow: auto; display: flex; flex-direction: column; }

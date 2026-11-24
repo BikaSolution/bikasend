@@ -577,8 +577,18 @@ func TestUI(t *testing.T) {
 	waitFor("the subscription box is ticked", `(() => { const l = document.querySelector('#dialog label.gag'); return !!l && l.querySelector('input').checked; })()`)
 	must("try to untick it", d.eval(`document.querySelector('#dialog label.gag input').click()`, nil))
 	waitFor("it flashes and stays ticked", `(() => { const l = document.querySelector('#dialog label.gag'); return l.classList.contains('nope') && l.querySelector('input').checked; })()`)
+	// The ads box runs from the pointer; cornered in the top-left, it jumps back to its slot.
 	must("try to share data", d.eval(`document.querySelector('#dialog label.ads input').click()`, nil))
-	waitFor("the ads box dodges and stays unticked", `(() => { const l = document.querySelector('#dialog label.ads'); return l.classList.contains('dodge') && !l.querySelector('input').checked; })()`)
+	waitFor("the ads box runs and stays unticked", `(() => { const b = document.querySelector('#dialog input.shy'); return b.classList.contains('fleeing') && !b.checked; })()`)
+	must("chase it into the corner", d.eval(`(() => {
+		const b = document.querySelector('#dialog input.shy');
+		for (let i = 0; i < 100 && b.classList.contains('fleeing'); i++) {
+			const x = parseFloat(b.style.left);
+			const y = parseFloat(b.style.top);
+			document.dispatchEvent(new PointerEvent('pointermove', { clientX: x + 20, clientY: y + 20 }));
+		}
+	})()`, nil))
+	waitFor("cornered, it is back in its slot", `!document.querySelector('#dialog input.shy').classList.contains('fleeing')`)
 	must("tick works on my machine", d.eval(`document.querySelector('#dialog label.machine input').click()`, nil))
 	waitFor("it works on yours too", `document.querySelector('#toast').textContent === 'Now also works on yours.'`)
 	clickText("close the cookie banner", "#dialog", "Close the cookie banner")

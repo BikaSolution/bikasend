@@ -2118,16 +2118,68 @@ function jokeSettings() {
     el.classList.add(cls);
   };
   const subscribe = h('input', { type: 'checkbox', checked: true, onclick: (e) => { e.preventDefault(); replay(e.target.closest('label'), 'nope'); } });
-  const ads = h('input', { type: 'checkbox', onpointerenter: (e) => replay(e.target.closest('label'), 'dodge'), onclick: (e) => { e.preventDefault(); replay(e.target.closest('label'), 'dodge'); } });
+  const ads = shyCheckbox();
   const machine = h('input', { type: 'checkbox', onchange: (e) => toast(e.target.checked ? 'Now also works on yours.' : 'Still works on yours. We checked.') });
   return h('fieldset', { class: 'jokes' }, h('legend', {}, 'Very important settings'),
     h('label', { class: 'check gag' }, subscribe, 'I hate having to subscribe to use the software'),
-    h('label', { class: 'check gag ads' }, ads, 'Send my data to 420 advertising partners'),
+    h('label', { class: 'check gag ads' }, h('span', { class: 'shy-slot' }, ads), 'Send my data to 420 advertising partners'),
     h('div', { class: 'telemetry' }, h('span', {}, 'Telemetry'), h('span', { class: 'muted small' }, 'None'),
       h('input', { type: 'range', min: '0', max: '1', step: '1', value: '0', 'aria-label': 'Telemetry', 'aria-valuetext': 'None' }),
       h('span', { class: 'muted small' }, 'None')),
     h('label', { class: 'check gag machine' }, machine, '“Works on my machine” mode'),
     h('div', { class: 'row-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => toast('There is no cookie banner. There never was.') }, 'Close the cookie banner')));
+}
+
+// shyCheckbox runs from the pointer to the window's edge; cornered, it jumps back to its slot.
+// It moves from where it is going, not where a transition shows it, so a quick chase still corners it.
+function shyCheckbox() {
+  const box = h('input', { type: 'checkbox', class: 'shy' });
+  let at = null;
+  const place = () => {
+    const r = box.getBoundingClientRect();
+    return at || { x: r.left, y: r.top, w: r.width, h: r.height };
+  };
+  const home = () => {
+    at = null;
+    box.classList.remove('fleeing');
+    box.style.left = '';
+    box.style.top = '';
+  };
+  const flee = (px, py) => {
+    const p = place();
+    const dx = p.x + p.w / 2 - px;
+    const dy = p.y + p.h / 2 - py;
+    const len = Math.hypot(dx, dy) || 1;
+    const x = Math.min(Math.max(p.x + (dx / len) * 60, 4), window.innerWidth - p.w - 4);
+    const y = Math.min(Math.max(p.y + (dy / len) * 60, 4), window.innerHeight - p.h - 4);
+    if (Math.hypot(x - p.x, y - p.y) < 8) {
+      home();
+      return;
+    }
+    if (!at) {
+      box.style.left = p.x + 'px';
+      box.style.top = p.y + 'px';
+      box.classList.add('fleeing');
+    }
+    at = { x, y, w: p.w, h: p.h };
+    box.style.left = x + 'px';
+    box.style.top = y + 'px';
+  };
+  const near = (e) => {
+    const p = place();
+    if (Math.hypot(e.clientX - (p.x + p.w / 2), e.clientY - (p.y + p.h / 2)) < 50) flee(e.clientX, e.clientY);
+  };
+  box.addEventListener('click', (e) => {
+    e.preventDefault();
+    flee(e.clientX, e.clientY);
+  });
+  box.addEventListener('change', () => { box.checked = false; });
+  document.addEventListener('pointermove', near);
+  $('dialog').addEventListener('close', () => {
+    document.removeEventListener('pointermove', near);
+    home();
+  }, { once: true });
+  return box;
 }
 
 function importDialog() {
