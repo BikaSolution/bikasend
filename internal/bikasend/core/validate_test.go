@@ -101,16 +101,17 @@ func TestValidateResponse(t *testing.T) {
 		})
 	}
 
-	// Caps: a pattern over maxPattern and uniqueItems over maxUniqueItems are skipped, not checked.
+	// Caps: a pattern over maxPattern or maxProgram, and uniqueItems over maxUniqueItems, are skipped.
 	long := newDocs(fstest.MapFS{"l.json": {Data: []byte(`{"openapi":"3.1.0","paths":{"/v":{"get":{"responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"type":"object","properties":{
 	  "code": {"type": "string", "pattern": "^` + strings.Repeat("b", maxPattern+1) + `"},
+	  "word": {"type": "string", "pattern": "^` + strings.Repeat("[a-z]{999}", 99) + `$"},
 	  "tags": {"type": "array", "uniqueItems": true}}}}}}}}}}}`)}})
 	_, lops, err := long.parse("l.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	dups := "[" + strings.TrimSuffix(strings.Repeat(`"a",`, maxUniqueItems+1), ",") + "]"
-	if got := long.validateResponse(lops["l.json GET /v"], 200, "application/json", []byte(`{"code": "a", "tags": `+dups+`}`)); len(got) != 0 {
+	if got := long.validateResponse(lops["l.json GET /v"], 200, "application/json", []byte(`{"code": "a", "word": "1", "tags": `+dups+`}`)); len(got) != 0 {
 		t.Errorf("patterns and uniqueItems past their caps must be skipped: %q", got)
 	}
 

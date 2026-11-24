@@ -26,6 +26,8 @@ const (
 	maxScan = 200 << 20
 	// Refs can fan out (20 properties, each a ref with 20 more); budgets stop exponential examples.
 	maxExampleNodes = 2_000
+	// An example, default or enum value from the spec over this size is left out.
+	maxSpecValue    = 64 << 10
 	maxExampleTotal = 1_000_000
 	maxPathKey      = 2 << 10
 )
@@ -721,13 +723,13 @@ func (d *docs) example(file string, v any, seen []string, left *int) any {
 	}
 	switch {
 	case s["example"] != nil:
-		return s["example"]
+		return specValue(s["example"], left)
 	case s["default"] != nil:
-		return s["default"]
+		return specValue(s["default"], left)
 	case len(list(s["enum"])) > 0:
-		return list(s["enum"])[0]
+		return specValue(list(s["enum"])[0], left)
 	case len(list(s["examples"])) > 0:
-		return list(s["examples"])[0]
+		return specValue(list(s["examples"])[0], left)
 	case len(list(s["allOf"])) > 0:
 		merged := map[string]any{}
 		for _, part := range list(s["allOf"]) {
@@ -774,6 +776,19 @@ func (d *docs) example(file string, v any, seen []string, left *int) any {
 	return nil
 }
 
+// specValue returns an example the spec gives, charged by its size: a ref can repeat it many times.
+func specValue(v any, left *int) any {
+	b, err := json.Marshal(v)
+	if err != nil || len(b) > maxSpecValue {
+		return nil
+	}
+	*left -= len(b) / 64
+	if *left <= 0 {
+		return nil
+	}
+	return v
+}
+
 // exampleObject charges the node's size before it sorts the keys, and long keys as they go, so a
 // huge or long-keyed node ends early instead of being walked on every visit.
 func (d *docs) exampleObject(file string, props map[string]any, seen []string, left *int) map[string]any {
@@ -783,7 +798,7 @@ func (d *docs) exampleObject(file string, props map[string]any, seen []string, l
 		return out
 	}
 	for _, name := range sortedKeys(props) {
-		*left -= len(name) / 64
+		*left -= 1 + len(name)/64
 		if *left <= 0 || len(name) > maxPathKey {
 			break
 		}
@@ -872,13 +887,13 @@ func (d *docs) hint(file string, v any, at string, seen []string, left *int, ind
 			for _, k := range keys {
 				if len(h.Keys) < maxHintItems && len(k) <= maxHintEnum && !slices.Contains(h.Keys, k) {
 					h.Keys = append(h.Keys, k)
-					*left -= len(k) / 64
+					*left -= 1 + len(k)/64
 				}
 			}
 			for _, e := range enum {
 				if len(h.Enum) < maxHintItems && !slices.Contains(h.Enum, e) {
 					h.Enum = append(h.Enum, e)
-					*left -= len(e) / 64
+					*left -= 1 + len(e)/64
 				}
 			}
 		}

@@ -304,6 +304,22 @@ func TestBodyHints(t *testing.T) {
 		t.Errorf("long keys must spend the budget: %d KB of hints, %d KB of body", len(hints)>>10, len(ws.Operations[0].Body)>>10)
 	}
 
+	// A 100 KB example behind 800 refs: over maxSpecValue, so it is left out instead of repeated.
+	var refs []string
+	for i := range 800 {
+		refs = append(refs, fmt.Sprintf(`"p%d": {"$ref": "#/components/schemas/E"}`, i))
+	}
+	blobSpec := `{"openapi": "3.0.0", "paths": {"/x": {"post": {"requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {` +
+		strings.Join(refs, ",") + `}}}}}, "responses": {"200": {"description": "ok"}}}}}, "components": {"schemas": {"E": {"type": "string", "example": "` +
+		strings.Repeat("e", 100<<10) + `"}}}}`
+	bs, _, err := newDocs(fstest.MapFS{"b.json": {Data: []byte(blobSpec)}}).parse("b.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bs.Operations[0].Body) > 200<<10 {
+		t.Errorf("a big spec example must not be repeated per ref: %d KB of body", len(bs.Operations[0].Body)>>10)
+	}
+
 	// A node with 100,000 keys spends the budget instead of being sorted on every visit.
 	huge := map[string]any{}
 	for i := range 100_000 {

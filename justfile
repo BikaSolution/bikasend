@@ -155,12 +155,14 @@ publish version="":
     (cd "$dir/files" && sum -c --strict --quiet "$dir/digests")
     echo "GitHub's digests match the files."
 
-    # The signer comes from the tag, not from this checkout; a change to it since the last release
-    # must be read first, because it handles the key and the passphrase.
+    # The signer and this recipe handle the key and the passphrase: they must be the tag's own, and a
+    # change since the last release must be read first.
+    signer=(pkg/sign cmd/sign justfile go.mod)
+    git diff --quiet "$v" -- "${signer[@]}" || { echo "run just publish from a clean checkout of $v: ${signer[*]} differ from the tag"; exit 1; }
     prev="$(git describe --tags --abbrev=0 "$v^" 2>/dev/null || true)"
-    if [ -n "$prev" ] && ! git diff --quiet "$prev" "$v" -- pkg/sign cmd/sign justfile; then
-      git --no-pager diff --stat "$prev" "$v" -- pkg/sign cmd/sign justfile
-      read -r -p "The signer or this recipe changed since $prev. Type 'reviewed' once you have read that diff: " seen || seen=""
+    if [ -n "$prev" ] && ! git diff --quiet "$prev" "$v" -- "${signer[@]}"; then
+      git --no-pager diff "$prev" "$v" -- "${signer[@]}"
+      read -r -p "The signer or this recipe changed since $prev (diff above). Type 'reviewed' once you have read it: " seen || seen=""
       [ "$seen" = reviewed ] || { echo "cancelled; $v stays a draft"; exit 1; }
     fi
     git archive "$v" go.mod go.sum pkg/sign cmd/sign | tar -x -C "$dir/src"

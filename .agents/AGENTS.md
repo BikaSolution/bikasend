@@ -127,8 +127,11 @@ Pick the version by what changed since the last tag:
    variable `SITE_URL`), the repo and the release public key baked in, then a separate job attests
    and uploads `Bikasend-<tag>-<platform>.zip` plus `Bikasend-<tag>-modules.txt`. When GitHub
    assigns no macOS runner, `retry-macos.yml` reruns that job, at most 3 times.
-3. **The human** runs `just publish v0.2.0`: it waits for the build, checks provenance
-   (`gh attestation verify`) and GitHub's digests, signs `Bikasend-<tag>-SHA256SUMS` with the
+3. **The human** runs `just publish v0.2.0` from a clean checkout of the tag (`main` right after
+   `just release`): it waits for the build, checks that the draft holds exactly the expected
+   files, that `release.yml` built each from the tag's commit (`gh attestation verify`) and
+   GitHub's digests, builds the signer from the tag (any change to it since the last release is
+   shown in full and must be confirmed), signs `Bikasend-<tag>-SHA256SUMS` with the
    offline release key (passphrase asked; the key never leaves their machine), uploads it with its
    `.sig`, and publishes the draft. Agents cannot do this step: it needs the passphrase. The app
    installs only releases whose signed list holds the file's SHA-256 (`checkSignature`).

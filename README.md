@@ -191,8 +191,10 @@ delete one.
 
 [`release.yml`](.github/workflows/release.yml) builds macOS, Windows and Linux on native
 runners into a draft release with generated notes. If GitHub has no macOS runner free,
-`retry-macos.yml` reruns that job, at most 3 times. `just publish` then checks that the workflow
-built each file (`gh attestation verify`) and that GitHub's digests match, signs
+`retry-macos.yml` reruns that job, at most 3 times. `just publish`, run from `main` right after
+`just release`, then checks that the draft holds exactly the expected files, that
+`release.yml` built each one from the tag's commit (`gh attestation verify`) and that GitHub's
+digests match, signs
 `Bikasend-<tag>-SHA256SUMS` with the offline release key and publishes the release. The download
 site picks it up within 5 minutes. The app installs an update only when that signature checks
 out with the public key in [`cmd/bikasend/release.pub`](cmd/bikasend/release.pub).

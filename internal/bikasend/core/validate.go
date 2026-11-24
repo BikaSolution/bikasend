@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,8 +23,9 @@ const (
 	maxChecks = 100_000
 	// Go's regexp is linear, but compiling a huge pattern still costs; skip those.
 	maxPattern = 1_000
-	// Compiled patterns stay for the scan; past this many, new ones are skipped.
+	// Compiled patterns stay for the scan; past this many, or this many instructions, they are skipped.
 	maxPatterns = 1_000
+	maxProgram  = 10_000
 	// uniqueItems compares encoded items; past this many items it is not checked.
 	maxUniqueItems = 2_000
 )
@@ -274,7 +276,7 @@ func (d *docs) pattern(p string, left *int) *regexp.Regexp {
 		return nil
 	}
 	var re *regexp.Regexp
-	if *left -= len(p); len(p) <= maxPattern && *left > 0 {
+	if *left -= len(p); len(p) <= maxPattern && *left > 0 && programSize(p) <= maxProgram {
 		re, _ = regexp.Compile(p)
 	}
 	if d.patterns == nil {
@@ -282,6 +284,20 @@ func (d *docs) pattern(p string, left *int) *regexp.Regexp {
 	}
 	d.patterns[p] = re
 	return re
+}
+
+// programSize counts the instructions a pattern compiles to: {1000} repeats grow it far past its
+// length. An invalid pattern counts as too large.
+func programSize(p string) int {
+	re, err := syntax.Parse(p, syntax.Perl)
+	if err != nil {
+		return maxProgram + 1
+	}
+	prog, err := syntax.Compile(re.Simplify())
+	if err != nil {
+		return maxProgram + 1
+	}
+	return len(prog.Inst)
 }
 
 // validFormat knows the common formats; an unknown format passes.
