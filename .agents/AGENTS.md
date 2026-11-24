@@ -88,8 +88,8 @@ internal/
     frontend/dist/               # index.html, app.css, app.js, Open Sans; embedded
     port.go, types.go, errors.go # Symlinks to pkg/sdk/bikasend/
   site/
-    api/handlers.go, routes.go   # /, /changelog, /feed.xml, /latest.json, /downloads/{tag}/{name}
-    api/templates/               # layout.html, index.html, changelog.html (html/template)
+    api/handlers.go, routes.go   # /, /changelog, /docs, /feed.xml, /latest.json, /downloads/{tag}/{name}, /healthz
+    api/templates/               # layout.html, index.html, changelog.html, docs.html (html/template)
     api/static/                  # site.css, icons, Open Sans, mascot
     core/service.go              # Cached GitHub releases (5 min), release notes, asset lookup
     port.go, types.go, errors.go # Symlinks to pkg/sdk/site/

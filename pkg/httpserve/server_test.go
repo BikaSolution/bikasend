@@ -2,6 +2,7 @@ package httpserve
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -37,18 +38,19 @@ func TestServer(t *testing.T) {
 	handler := Handler(router)
 
 	tests := []struct {
-		name       string
-		method     string
-		path       string
-		wantStatus int
-		wantBody   string
-		wantGroup  bool
+		name        string
+		method      string
+		path        string
+		wantStatus  int
+		wantBody    string
+		wantGroup   bool
+		wantNoStore bool
 	}{
-		{name: "health", method: http.MethodGet, path: "/health", wantStatus: http.StatusOK, wantBody: "OK"},
+		{name: "healthz", method: http.MethodGet, path: "/healthz", wantStatus: http.StatusOK, wantBody: "ok", wantNoStore: true},
 		{name: "group route with path value", method: http.MethodGet, path: "/v1/item/42", wantStatus: http.StatusOK, wantBody: "42", wantGroup: true},
 		{name: "panic recovers to 500", method: http.MethodGet, path: "/v1/panic", wantStatus: http.StatusInternalServerError, wantBody: "internal server error\n", wantGroup: true},
 		{name: "unknown path", method: http.MethodGet, path: "/nope", wantStatus: http.StatusNotFound},
-		{name: "wrong method", method: http.MethodPost, path: "/health", wantStatus: http.StatusMethodNotAllowed},
+		{name: "wrong method", method: http.MethodPost, path: "/healthz", wantStatus: http.StatusMethodNotAllowed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -71,10 +73,46 @@ func TestServer(t *testing.T) {
 				h.Get("Cross-Origin-Opener-Policy") != "same-origin" || h.Get("Cross-Origin-Resource-Policy") != "same-origin" || h.Get("Permissions-Policy") != permissions {
 				t.Errorf("router or security headers missing: %v", h)
 			}
+			if (h.Get("Cache-Control") == "no-store") != tt.wantNoStore {
+				t.Errorf("Cache-Control = %q, want no-store %v", h.Get("Cache-Control"), tt.wantNoStore)
+			}
 			if (w.Header().Get("X-Group") == "1") != tt.wantGroup {
 				t.Errorf("group header = %q, want %v", w.Header().Get("X-Group"), tt.wantGroup)
 			}
 		})
+	}
+}
+
+func TestCheckHealth(t *testing.T) {
+	var healthy Router
+	healthy.AddGenericHealthCheck()
+	tests := []struct {
+		name    string
+		handler http.Handler
+		wantErr bool
+	}{
+		{name: "healthy site", handler: Handler(healthy)},
+		{name: "server error", handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "ok", http.StatusInternalServerError) }), wantErr: true},
+		{name: "wrong body", handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("okay")) }), wantErr: true},
+		{name: "redirect is not followed", handler: http.RedirectHandler("/healthz2", http.StatusFound), wantErr: true},
+		{name: "hung server", handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }), wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(tt.handler)
+			defer srv.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+			if err := CheckHealth(ctx, srv.Listener.Addr().String()); (err != nil) != tt.wantErr {
+				t.Errorf("CheckHealth error = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+	srv := httptest.NewServer(Handler(healthy))
+	addr := srv.Listener.Addr().String()
+	srv.Close()
+	if err := CheckHealth(context.Background(), addr); err == nil {
+		t.Error("CheckHealth with nothing listening: want an error")
 	}
 }
 

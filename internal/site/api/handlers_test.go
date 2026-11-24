@@ -94,7 +94,8 @@ func TestHandlers(t *testing.T) {
 				`href="/downloads/v0.1.0/Bikasend-v0.1.0-linux-amd64.zip">Linux</a>`,
 				`<link rel="stylesheet" href="/static/site.css?v=`,
 				`<link rel="alternate" type="application/atom+xml" title="Bikasend releases" href="/feed.xml">`,
-				`<a class="hide-sm" href="/changelog">Changelog</a>`,
+				`<a class="hide-sm" href="/changelog">Changelog</a>`, `<a class="hide-sm" href="/docs">Docs</a>`,
+				`The <a href="/docs">docs</a>`, `<nav aria-label="Footer"><a href="/docs">Docs</a>`,
 			},
 			excludes: []string{"<style", "style="},
 		},
@@ -165,6 +166,29 @@ func TestHandlers(t *testing.T) {
 			contains:   []string{"<title>Changelog: Bikasend</title>", `<link rel="canonical" href="https://send.example.com/changelog">`},
 		},
 		{
+			name:        "docs has its own title, canonical link and sections",
+			path:        "/docs",
+			wantStatus:  http.StatusOK,
+			contentType: "text/html; charset=utf-8",
+			contains: []string{
+				"<title>Docs: Bikasend</title>", `<link rel="canonical" href="https://send.example.com/docs">`,
+				`<meta name="description" content="How to use Bikasend:`, `<nav class="toc card" aria-label="On this page">`,
+				`<a href="#bika-json">The .bika.json file</a>`, `<article id="bika-json">`, "<h2>Getting started</h2>",
+				"<h2>Secrets and hosts</h2>", "<h2>Keyboard shortcuts</h2>", `"clientSecret": "{{client_secret}}"`,
+				`<span class="pill" title="Latest release"><span class="dot"></span>v0.2.0</span>`,
+			},
+			excludes: []string{"<style", "style=", "<script"},
+		},
+		{
+			name:         "healthz answers ok without a version",
+			path:         "/healthz",
+			wantStatus:   http.StatusOK,
+			contentType:  "text/plain; charset=utf-8",
+			cacheControl: "no-store",
+			contains:     []string{"ok"},
+			excludes:     []string{"v0.", "Bikasend"},
+		},
+		{
 			name:         "robots points to the sitemap",
 			path:         "/robots.txt",
 			wantStatus:   http.StatusOK,
@@ -181,6 +205,7 @@ func TestHandlers(t *testing.T) {
 				`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
 				"<loc>https://send.example.com/</loc><lastmod>2026-11-01</lastmod>",
 				"<loc>https://send.example.com/changelog</loc>",
+				"<loc>https://send.example.com/docs</loc><lastmod>2026-11-01</lastmod>",
 			},
 		},
 		{
@@ -226,6 +251,9 @@ func TestHandlers(t *testing.T) {
 			if csp := h.Get("Content-Security-Policy"); !strings.Contains(csp, "style-src 'self'") || strings.Contains(csp, "unsafe") {
 				t.Errorf("CSP = %q", csp)
 			}
+			if h.Get("X-Content-Type-Options") != "nosniff" || h.Get("X-Frame-Options") != "DENY" || h.Get("Strict-Transport-Security") == "" {
+				t.Errorf("security headers missing: %v", h)
+			}
 			if tt.path == "/" && tt.wantStatus == http.StatusOK && h.Get("Vary") != "User-Agent" {
 				t.Errorf("index varies by User-Agent but Vary = %q", h.Get("Vary"))
 			}
@@ -247,7 +275,7 @@ func TestHandlers(t *testing.T) {
 func TestLinksIgnoreHostHeader(t *testing.T) {
 	var down atomic.Bool
 	handler := newHandler(t, `[{"tag_name": "v0.1.0"}]`, &down)
-	for _, path := range []string{"/", "/changelog", "/robots.txt", "/sitemap.xml"} {
+	for _, path := range []string{"/", "/changelog", "/docs", "/robots.txt", "/sitemap.xml"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		r.Host = "evil.example"
 		r.Header.Set("X-Forwarded-Host", "evil.example")
@@ -313,6 +341,7 @@ func TestWithoutReleases(t *testing.T) {
 	}{
 		{name: "index when GitHub is down", down: true, path: "/", wantStatus: http.StatusOK, contains: "Release information is unavailable"},
 		{name: "changelog when GitHub is down", down: true, path: "/changelog", wantStatus: http.StatusOK, contains: "Release information is unavailable"},
+		{name: "docs when GitHub is down", down: true, path: "/docs", wantStatus: http.StatusOK, contains: "<h2>Getting started</h2>"},
 		{name: "latest when GitHub is down", down: true, path: "/latest.json", wantStatus: http.StatusServiceUnavailable, contains: `{"error":"unavailable"}`},
 		{name: "feed when GitHub is down", down: true, path: "/feed.xml", wantStatus: http.StatusServiceUnavailable},
 		{name: "latest with no releases", releases: `[]`, path: "/latest.json", wantStatus: http.StatusNotFound, contains: `{"error":"no releases"}`},

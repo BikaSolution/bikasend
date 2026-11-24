@@ -3,6 +3,7 @@ package httpserve
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -13,6 +14,12 @@ type httpserver struct {
 
 // maxInFlight caps concurrent requests, so a flood from many IPs cannot pile up goroutines.
 const maxInFlight = 256
+
+const (
+	healthPath    = "/healthz"
+	healthBody    = "ok"
+	healthTimeout = 3 * time.Second
+)
 
 func New(port int, host string, router Router) HTTPServer {
 	return &httpserver{
@@ -57,9 +64,37 @@ func (s *httpserver) Close() error {
 	return s.server.Shutdown(ctx)
 }
 
+// AddGenericHealthCheck answers /healthz with a fixed "ok". It shows no version and calls nothing upstream.
 func (r *Router) AddGenericHealthCheck() {
-	r.Get("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	}))
+	health := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = io.WriteString(w, healthBody)
+	})
+	r.Get(healthPath, health)
+}
+
+// CheckHealth gets /healthz from the server on addr. The site image has no curl, so the binary
+// runs its own Docker health check.
+func CheckHealth(ctx context.Context, addr string) error {
+	ctx, cancel := context.WithTimeout(ctx, healthTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+healthPath, nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(len(healthBody))+1))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK || string(body) != healthBody {
+		return fmt.Errorf("health check: status %d, body %q", resp.StatusCode, body)
+	}
+	return nil
 }

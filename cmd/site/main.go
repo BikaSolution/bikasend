@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -23,9 +26,18 @@ func main() {
 	apiURL := flag.String("github-api", "https://api.github.com", "GitHub API base URL")
 	behindTunnel := flag.Bool("behind-cloudflare", false, "trust CF-Connecting-IP from private peers; set only behind the Cloudflare tunnel")
 	publicURL := flag.String("public-url", "", "the site's own https origin, for canonical links and the sitemap")
+	healthcheck := flag.Bool("healthcheck", false, "get /healthz of the site on 127.0.0.1:<port>, exit 0 if ok, else 1; for the Docker health check")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	if *healthcheck {
+		if err := httpserve.CheckHealth(context.Background(), net.JoinHostPort("127.0.0.1", strconv.Itoa(*port))); err != nil {
+			slog.Error("health check", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Read-only token for a private repo. Comes from the environment only, never a flag (flags show in ps).
 	token := os.Getenv("GITHUB_TOKEN")

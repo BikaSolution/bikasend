@@ -1,7 +1,7 @@
 # Website Content Audit
 
-The download site (`internal/site/api/templates/index.html`) and `README.md` make promises about the app:
-features, formats, requirements, install steps. Most of that text is static. Releases come from
+The download site (`internal/site/api/templates/index.html` and `docs.html`) and `README.md` make
+promises about the app: features, formats, requirements, install steps. Most of that text is static. Releases come from
 GitHub, but the rest goes stale silently when the code changes. A wrong requirement or a missing
 feature costs users time and trust.
 
@@ -68,6 +68,42 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Mascot credit (Go gopher, CC BY 4.0) and font licence | Footer, README | `img/`, `static/OFL-OpenSans.txt` |
 | Maker credit: Plaasbotter | Footer, README | `author` in `cmd/bikasend/wails.json` |
 | Copyright BikaSolutions; MIT licence | Footer, README | `companyName` in `cmd/bikasend/wails.json`; `LICENSE` |
+
+### Docs page (`/docs`)
+
+The docs page goes deeper than the index, so it goes stale faster. Check every row on each audit.
+
+| Claim on `/docs` | Section | Source of truth |
+| --- | --- | --- |
+| First-run steps for macOS, Windows, Linux; SHA-256 commands | Getting started | The FAQ in `index.html` (keep both the same); signing steps and `apt-get` line in `release.yml` |
+| Open folder, grouped by tag, reopens the last folder; trust prompt | Getting started | `welcome`, `start`, `renderOps`, trust dialog in `app.js`; `Open` in `core/service.go` |
+| Filter by path, summary or pasted URL; send again cancels | Getting started | `renderOps`, `send` in `app.js` |
+| Name has `swagger`/`openapi`, `.json`/`.yaml`/`.yml`, any case; needs a `swagger` or `openapi` field | Which files | `isSpecName`, `parse` (`ErrNotSpec`) in `core/swagger.go` |
+| Skips `.git`, `node_modules`, `vendor`; YAML twin skipped | Which files | `scanSpecs` in `core/swagger.go` |
+| `$ref` relative, visible `.json`/`.yaml`/`.yml`, remote refused, never outside the folder | Which files | `deref`, `refTarget` in `core/swagger.go`; `os.OpenRoot` in `core/service.go` |
+| YAML subset: no anchors, tags or multi-document files | Which files | `core/yaml.go` |
+| 20 MB per file, 200 MB per folder; one bad file fails only itself | Which files | `maxSpec`, `maxScan`, `scanSpecs` in `core/swagger.go` |
+| Reloads on change of known files; new files on rescan (↻) | Which files | `Changed`, `fingerprint` in `core/service.go`; `watch` in `api/handlers.go`; `rescan` in `index.html` |
+| What else it reads from the folder | Which files | `loadFolder`, `loadTLS`, `addFile`/`AllowUpload` in `core/` |
+| Four scopes, narrowest first; `{{baseUrl}}` from the spec server, picker per spec | Variables | `lookup`, `definitions` in `core/service.go`; `serverFor` in `app.js` |
+| `globals.json` in the user config folder, variables only | Variables, .bika.json | `ConfigDir` in `cmd/bikasend/main.go`; `parseConfig` in `core/variables.go` |
+| Nesting up to 10, cycles refused, `{{{{text}}}}` literal, name pattern | Variables | `walk`, `varRef`, `namePattern` in `core/variables.go` |
+| Every `.bika.json` field, its limits and defaults, unknown fields refused | .bika.json | `configFile`, `environment`, `parseConfig`, `validHost` in `core/variables.go`; `client`, `defaultTimout` in `core/http.go` |
+| Created with a `local` environment on the first shared save | .bika.json | `editFile`, `starterConfig` in `core/service.go` |
+| Trust pins the SHA-256, own edits keep it; 1 MB cap; symlink refused | .bika.json | `trusted`, `loadFolder`, `editFile` in `core/service.go` |
+| `local` picked first; `prod…` asks before a send | .bika.json | `firstEnv`, `workspace` (`Production`) in `core/service.go`; `send` in `app.js` |
+| OAuth2: https token URL, host in `hosts`, token kept until it expires | .bika.json | `oauthToken` in `core/http.go` |
+| SigV4: `service` required, region falls back to `aws` | .bika.json | `parseConfig` in `core/variables.go`; `signV4` in `core/http.go` |
+| Variable forms, one source each, non-text is secret | .bika.json | `varValue.UnmarshalJSON`, `isSecretKind` in `core/variables.go` |
+| Secret-looking names and their exceptions | .bika.json | `secretName`, `guardFileValue`, `isOnlyReference` in `core/variables.go` |
+| No proxy in the file; proxy is a setting | .bika.json | `configFile` (no field); `Settings.Proxy` in `pkg/sdk/bikasend/types.go` |
+| AWS values load through the CLI, forgotten on environment switch | Secrets | `LoadSecrets`, `SignIn` in `core/http.go`; `switchEnv` in `core/service.go`; `pkg/awscli` |
+| Masked until Reveal; history in memory unless saved, masked on disk; echoes masked | Secrets | `app.js` var card and history text; `saveHistory` in `core/history.go`; `mask` in `core/variables.go` |
+| Hosts list, loopback exemption, Send once / Always allow, plain http, redirects | Secrets | `guard`, `CheckRedirect` in `core/http.go`; `isLoopback` in `core/variables.go`; `send` in `app.js` |
+| Five export formats, `BIKASEND_` variables, refusals, auth notes | Copy as code | `exporters`, `Export`, `envVarName`, `unsafeRune`, `exportNotes` in `core/curl.go`; `EXPORTS` in `app.js` |
+| Update check on start, off in Settings; saved to Downloads; two SHA-256 checks; delete when GitHub can't confirm; install and restart | Updates | `CheckUpdate`, `DownloadUpdate`, `downloadDir`, `InstallUpdate` in `core/history.go`; `start`, `updateDialog` in `app.js` |
+| Keyboard shortcuts | Keyboard shortcuts | `keydown` handler in `wire` and the `welcome` text in `app.js` |
+| `/healthz` and the Docker health check | README (Download site) | `AddGenericHealthCheck`, `CheckHealth` in `pkg/httpserve/server.go`; `deploy/site/docker-compose.yml` |
 
 A new claim on the site needs a new row here. A row whose source no longer exists means the claim
 must go or change.
