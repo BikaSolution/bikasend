@@ -41,8 +41,9 @@ don't use.
   variables.
 - **Bodies pre-filled** from the schema's examples, enums and defaults. Path and query
   parameters get their own form. JSON, text, XML, form and multipart (file upload) bodies.
-- **`{{variables}}` everywhere**, highlighted as you type, with autocomplete. Path params like `{id}` get their own colour,
-  outlined until filled in. Hover a variable to see where it comes from, reveal a secret with a click, or open it in the AWS console.
+- **`{{variables}}` everywhere**, highlighted as you type, with autocomplete. Hover a variable to
+  see where it comes from, reveal a secret with a click, or open it in the AWS console. Path
+  params like `{id}` get their own colour, underlined until filled in; hover one to set it.
 - **Environments and shared variables.** A committed `.bika.json` holds environments (local,
   staging…) and variable definitions for the whole team; Bikasend creates it the first time you
   save a shared variable. Create and delete environments and edit their hosts in the variables
@@ -55,8 +56,9 @@ don't use.
 - **History, tabs, command palette (`⌘K`), cURL import.** Copy any request as cURL, PowerShell,
   HTTPie, JavaScript `fetch` or Python `requests`; secrets become environment variable references.
   `⌘ +` / `⌘ −` (`Ctrl` on Windows and Linux) change the text size.
-- **Updates you can trust.** When a new version is out, Bikasend downloads it for your platform and
-  checks its SHA-256 against the release before it saves the file.
+- **Updates you can trust.** The version sits at the bottom of the sidebar. When a new one is out,
+  Bikasend downloads it for your platform and checks its SHA-256 against both the update site and
+  the GitHub release. It shows you both hashes and asks before it replaces the app and restarts.
 - **Secrets stay in memory.** Never written to disk, logs or the web view. Blocked from hosts an
   environment doesn't list unless you confirm the host, from plain http, and from redirects to
   another host or to plain http.

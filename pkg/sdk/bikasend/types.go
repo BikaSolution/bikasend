@@ -209,3 +209,16 @@ type Update struct {
 	Available bool   `json:"available"`
 	URL       string `json:"url"`
 }
+
+// UpdateDownload is a saved update. Installable is false when GitHub could not confirm the hash
+// or the app cannot replace itself; Reason says why.
+type UpdateDownload struct {
+	Tag          string `json:"tag"`
+	Path         string `json:"path"`
+	SHA256       string `json:"sha256"`
+	SiteSHA256   string `json:"siteSha256"`
+	GitHubSHA256 string `json:"githubSha256"`
+	Target       string `json:"target"`
+	Installable  bool   `json:"installable"`
+	Reason       string `json:"reason"`
+}

@@ -42,8 +42,14 @@ that crosses a boundary updates it in the same PR.
 - **The update download trusts nothing it reads.** `DownloadUpdate` fetches only from the update
   site baked into the build, follows redirects only to that site and GitHub hosts, refuses a
   version that is not newer and a name that does not match the tag, checks the SHA-256 from
-  `latest.json`, caps the size and saves with `os.Link`, which never overwrites a file. It never
-  runs or opens the download. The hash proves what the update site published, nothing more.
+  `latest.json`, caps the size and saves with `os.Link`, which never overwrites a file.
+- **An update installs only on two matching hashes and a click.** GitHub's own release API (repo
+  baked into the build) must list the same SHA-256 as `latest.json`, so the update site alone
+  cannot push code. The user sees both hashes and clicks "Update and restart". `InstallUpdate`
+  takes no path from the webview: it installs the file `DownloadUpdate` checked, hashes it again,
+  unpacks only the expected names through `os.Root` (no links, no paths out, size and file caps)
+  and swaps it in with renames. Without a repo, a GitHub answer or a writable app folder it only
+  saves the zip.
 - **Hosts lists change only on an explicit click** ("Always allow" when there is no list, or the
   environment editor). A host outside a non-empty list is refused; the send dialog only offers to
   open the editor, never to send. Show hosts as Go parsed them (`Preview.Host`).

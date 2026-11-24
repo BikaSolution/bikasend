@@ -40,6 +40,8 @@ func TestClient(t *testing.T) {
 				t.Errorf("per_page = %q", r.URL.Query().Get("per_page"))
 			}
 			_, _ = w.Write([]byte(`[{"tag_name":"v1.0.0","assets":[{"id":7,"name":"a.zip","size":3,"digest":"sha256:ab"}]}]`))
+		case "/repos/example/app/releases/tags/v1.0.0":
+			_, _ = w.Write([]byte(`{"tag_name":"v1.0.0","assets":[{"id":7,"name":"a.zip","digest":"sha256:ab"}]}`))
 		case "/repos/example/app/releases/assets/7":
 			if r.Header.Get("Accept") != "application/octet-stream" {
 				t.Errorf("accept = %q", r.Header.Get("Accept"))
@@ -62,6 +64,13 @@ func TestClient(t *testing.T) {
 	releases, err := c.Releases(ctx, 5)
 	if err != nil || len(releases) != 1 || releases[0].Assets[0].Digest != "sha256:ab" {
 		t.Fatalf("releases = %+v, err = %v", releases, err)
+	}
+	rel, err := c.ReleaseByTag(ctx, "v1.0.0")
+	if err != nil || rel.TagName != "v1.0.0" || rel.Assets[0].Digest != "sha256:ab" {
+		t.Errorf("release by tag = %+v, err = %v", rel, err)
+	}
+	if _, err := c.ReleaseByTag(ctx, "v9.9.9"); !errors.Is(err, ErrUpstream) {
+		t.Errorf("missing tag: err = %v, want ErrUpstream", err)
 	}
 	u, err := c.AssetURL(ctx, 7)
 	if err != nil || u != "https://objects.example/a.zip?sig=1" {

@@ -181,8 +181,17 @@ func (a *App) CheckUpdate() (bikasend.Update, error) {
 	return a.svc.CheckUpdate(a.ctx)
 }
 
-func (a *App) DownloadUpdate() (string, error) {
+func (a *App) DownloadUpdate() (bikasend.UpdateDownload, error) {
 	return a.svc.DownloadUpdate(a.ctx)
+}
+
+// InstallUpdate installs the checked update, starts it and quits this app.
+func (a *App) InstallUpdate() error {
+	if err := a.svc.InstallUpdate(a.ctx); err != nil {
+		return err
+	}
+	runtime.Quit(a.ctx)
+	return nil
 }
 
 // SaveResponse writes a response body to a file the user picks. isBase64 marks a binary body.

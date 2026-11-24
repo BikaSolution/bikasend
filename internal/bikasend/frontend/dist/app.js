@@ -147,14 +147,14 @@ function varField({ value, multiline, placeholder, label, tab, onInput, classNam
   input.addEventListener('scroll', () => { hl.scrollTop = input.scrollTop; hl.scrollLeft = input.scrollLeft; if (!varCard.editing) hideVarCard(); });
   input.addEventListener('mousemove', (e) => {
     const hit = varAtPoint(hl, e.clientX, e.clientY);
-    if (hit) showVarCardSoon(hit.name, hit.rect, tab);
+    if (hit) showVarCardSoon(hit.name, hit.rect, tab, hit.param);
     else if (!onCardPath(e.clientX, e.clientY)) hideVarCardSoon();
   });
   input.addEventListener('mouseleave', (e) => { if (!onCardPath(e.clientX, e.clientY)) hideVarCardSoon(); });
   input.addEventListener('click', (e) => {
     if (!(e.metaKey || e.ctrlKey)) return;
     const hit = varAtPoint(hl, e.clientX, e.clientY);
-    if (!hit) return;
+    if (!hit || hit.param) return;
     e.preventDefault();
     openVariable(hit.name);
   });
@@ -474,35 +474,72 @@ function renderTop() {
   document.documentElement.style.setProperty('--fs', ((ws && ws.settings.fontSize) || 13) + 'px');
 }
 
-async function downloadUpdate() {
+// startUpdate downloads and checks the update once, then asks before it installs.
+async function startUpdate() {
   const up = state.update;
+  if (up.download) { updateDialog(); return; }
   up.busy = true;
   up.error = '';
   renderBanners();
   try {
-    up.saved = await api().DownloadUpdate();
+    up.download = await api().DownloadUpdate();
   } catch (e) {
     up.error = errText(e);
   }
   up.busy = false;
   renderBanners();
+  if (up.download) updateDialog();
+}
+
+function updateDialog() {
+  const up = state.update;
+  const d = up.download;
+  const row = (label, hash, ok) => h('tr', {}, h('th', {}, label), h('td', { class: 'mono hash' }, hash || '—'),
+    h('td', { class: ok ? 'ok' : 'err' }, ok ? '✓ matches' : '✗ not confirmed'));
+  const install = h('button', { class: 'btn primary', onclick: async () => {
+    install.disabled = true;
+    install.textContent = 'Installing…';
+    try {
+      await call('InstallUpdate');
+    } catch {
+      install.disabled = false;
+      install.textContent = 'Update and restart';
+    }
+  } }, 'Update and restart');
+  openDialog((close) => h('div', { class: 'body' },
+    h('h2', {}, `Update to Bikasend ${d.tag}`),
+    h('table', { class: 'hashes' }, h('tbody', {},
+      h('tr', {}, h('th', {}, 'SHA-256 of the download'), h('td', { class: 'mono hash' }, d.sha256), h('td', {})),
+      row('Update site lists', d.siteSha256, d.siteSha256 === d.sha256),
+      row('GitHub release lists', d.githubSha256, !!d.githubSha256 && d.githubSha256 === d.sha256))),
+    d.installable
+      ? h('p', {}, 'Both match. Bikasend replaces ', h('span', { class: 'mono' }, d.target), ' and restarts. Open request tabs close.')
+      : h('p', { class: 'notice warn' }, d.reason + '. Unzip the saved file and replace the app yourself, or use the download page.'),
+    h('p', { class: 'muted small' }, 'Saved: ', h('span', { class: 'mono' }, d.path)),
+    h('div', { class: 'buttons' },
+      h('button', { class: 'btn', onclick: close }, 'Not now'),
+      h('button', { class: 'btn', onclick: () => call('OpenURL', up.url) }, 'Download page'),
+      d.installable ? install : null)));
+}
+
+function renderVersion() {
+  const el = $('sideFoot');
+  if (!el || !state.ws) return;
+  const up = state.update;
+  el.replaceChildren(h('span', { class: 'muted small version' }, 'Bikasend ' + state.ws.version),
+    up && up.available ? h('button', { class: 'update-pill', disabled: !!up.busy, title: `You have ${up.current}`, onclick: startUpdate }, up.busy ? 'Checking…' : `Update to ${up.latest}`) : null);
 }
 
 function renderBanners() {
   const ws = state.ws;
   const out = [];
-  if (state.update && state.update.available) {
+  renderVersion();
+  if (state.update && state.update.available && (!state.update.dismissed || state.update.error)) {
     const up = state.update;
     const page = h('button', { class: 'link', onclick: () => call('OpenURL', up.url) }, 'Download page');
-    const later = h('button', { class: 'link', onclick: () => { state.update = null; renderBanners(); } }, up.saved ? 'Close' : 'Later');
-    let text = `Bikasend ${up.latest} is available (you have ${up.current}).`;
-    let action = h('button', { class: 'btn primary', disabled: !!up.busy, onclick: downloadUpdate }, up.busy ? 'Downloading…' : 'Download and verify');
-    if (up.saved) {
-      text = `Saved ${up.saved}. Its SHA-256 matches the checksum the update site published. Unzip it and replace the app you are running.`;
-      action = null;
-    } else if (up.error) {
-      text = `The download failed: ${up.error}`;
-    }
+    const later = h('button', { class: 'link', onclick: () => { up.dismissed = true; up.error = ''; renderBanners(); } }, 'Later');
+    const text = up.error ? `The update failed: ${up.error}` : `Bikasend ${up.latest} is available (you have ${up.current}).`;
+    const action = h('button', { class: 'btn primary', disabled: !!up.busy, onclick: startUpdate }, up.busy ? 'Downloading and checking…' : 'Update…');
     out.push(h('div', { class: 'banner' + (up.error ? ' warn' : '') }, h('span', { class: 'grow' }, text), action, page, later));
   }
   if (ws && ws.configFile && !ws.trusted && !ws.configError) {
@@ -915,25 +952,77 @@ function onCardPath(x, y) {
     && y >= Math.min(a.top, c.top) - 4 && y <= Math.max(a.bottom, c.bottom) + 4;
 }
 
-// varAtPoint finds the highlighted {{variable}} under the pointer; the overlay sits under the input.
+// varAtPoint finds the highlighted {{variable}} or {param} under the pointer; the overlay sits under the input.
 function varAtPoint(hl, x, y) {
   for (const m of hl.querySelectorAll('mark')) {
     for (const r of m.getClientRects()) {
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
         const name = (m.textContent.match(/^\{\{\s*([A-Za-z0-9_.$-]+)\s*\}\}$/) || [])[1];
         if (name) return { name, rect: r };
+        const param = m.classList.contains('param') && (m.textContent.match(/^\{([A-Za-z0-9_.-]+)\}$/) || [])[1];
+        if (param) return { name: param, rect: r, param: true };
       }
     }
   }
   return null;
 }
 
-function showVarCardSoon(name, rect, tab) {
+function showVarCardSoon(name, rect, tab, param) {
   if (varCard.editing) return;
   clearTimeout(varCard.hideTimer);
-  if (varCard.el && varCard.name === name) return;
+  const key = param ? '{' + name + '}' : name;
+  if (varCard.el && varCard.name === key) return;
   clearTimeout(varCard.showTimer);
-  varCard.showTimer = setTimeout(() => showVarCard(name, rect, tab), varCard.el ? 0 : 250);
+  varCard.showTimer = setTimeout(() => (param ? showParamCard : showVarCard)(name, rect, tab), varCard.el ? 0 : 250);
+}
+
+// showParamCard shows a {param} in the URL: its spec notes, its value, and a form to set it.
+function showParamCard(name, rect, tab) {
+  hideVarCard();
+  const p = (tab.req.pathParams || []).find((x) => x.name === name);
+  const found = tab.req.operation && opById(tab.req.operation);
+  const doc = found && found.op.params.find((x) => x.in === 'path' && x.name === name);
+  const rows = [h('div', { class: 'vc-meta' }, 'Path parameter' + (doc && doc.required ? ' · required' : ''))];
+  if (doc && doc.description) rows.push(h('div', { class: 'vc-note' }, doc.description));
+  rows.push(p && p.value
+    ? h('div', { class: 'vc-value mono' }, p.value)
+    : h('div', { class: 'vc-note' }, `No value yet: the request goes out with {${name}} in the path.`));
+  const el = h('div', { class: 'var-card param', role: 'dialog', 'aria-label': `{${name}}` },
+    h('div', { class: 'vc-head' }, h('span', { class: 'vc-name mono' }, `{${name}}`), p && p.value ? null : h('span', { class: 'badge warn' }, 'empty')),
+    ...rows,
+    h('div', { class: 'vc-actions' }, h('button', { class: 'btn primary', onclick: () => editParamInCard(name, tab, doc) }, p && p.value ? 'Edit' : 'Set value')));
+  el.addEventListener('mouseenter', () => clearTimeout(varCard.hideTimer));
+  el.addEventListener('mouseleave', hideVarCardSoon);
+  document.body.append(el);
+  varCard.el = el;
+  varCard.name = '{' + name + '}';
+  varCard.anchor = rect;
+  placeVarCard();
+}
+
+function editParamInCard(name, tab, doc) {
+  const el = varCard.el;
+  if (!el) return;
+  varCard.editing = true;
+  clearTimeout(varCard.hideTimer);
+  const p = (tab.req.pathParams || []).find((x) => x.name === name);
+  const val = h('input', { type: 'text', spellcheck: 'false', autocomplete: 'off', value: (p && p.value) || '', placeholder: (doc && doc.example) || 'Value or {{variable}}' });
+  const save = (ev) => {
+    ev.preventDefault();
+    if (p) p.value = val.value;
+    else tab.req.pathParams.push({ name, value: val.value, enabled: true });
+    tab.dirty = true;
+    hideVarCard();
+    renderRequest();
+  };
+  el.replaceChildren(el.firstChild, h('form', { class: 'vc-form', onsubmit: save },
+    h('label', { class: 'vc-field' }, h('span', {}, 'Value'), val, h('span', { class: 'vc-hint' }, 'Also on the Params tab. {{variables}} work here.')),
+    h('div', { class: 'vc-actions' },
+      h('button', { class: 'btn primary', type: 'submit' }, 'Save'),
+      h('button', { class: 'btn', type: 'button', onclick: hideVarCard }, 'Cancel'))));
+  placeVarCard();
+  val.focus();
+  val.select();
 }
 
 function hideVarCardSoon() {

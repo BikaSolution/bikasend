@@ -42,6 +42,8 @@ type Service interface {
 	Export(r Request, format string) (string, error)
 	ImportCurl(cmd string) (Request, error)
 	CheckUpdate(ctx context.Context) (Update, error)
-	// DownloadUpdate saves this platform's newest build after checking its SHA-256; it returns the path.
-	DownloadUpdate(ctx context.Context) (string, error)
+	// DownloadUpdate saves this platform's newest build and checks its SHA-256 with the update site and GitHub.
+	DownloadUpdate(ctx context.Context) (UpdateDownload, error)
+	// InstallUpdate replaces this app with the build DownloadUpdate checked, then starts the new one.
+	InstallUpdate(ctx context.Context) error
 }

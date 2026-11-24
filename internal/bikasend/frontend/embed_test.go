@@ -560,8 +560,16 @@ func TestUI(t *testing.T) {
 		t.Errorf("URL = %q, want {{baseUrl}}/items/{id}", url)
 	}
 	waitFor("the empty path param is marked apart from variables", `(() => { const m = [...document.querySelectorAll('.urlbar .hl mark')]; return m.length === 2 && m[0].className === 'ok' && m[1].className === 'param empty' && m[1].textContent === '{id}'; })()`)
-	must("fill the path param", d.eval(`(() => { const i = document.querySelector('#request input[aria-label="Value of id"]'); i.value = '7'; i.dispatchEvent(new Event('input')); })()`, nil))
-	waitFor("the filled path param", `document.querySelector('.urlbar .hl mark.param').className === 'param'`)
+	waitFor("the version shows", `document.querySelector('#sideFoot .version').textContent === 'Bikasend dev'`)
+
+	// Hover {id} in the URL and set it from its card.
+	var paramAt []float64
+	must("find the path param", d.eval(`(() => { const r = document.querySelector('.urlbar .hl mark.param').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`, &paramAt))
+	call("move the mouse onto the path param", "Input.dispatchMouseEvent", map[string]any{"type": "mouseMoved", "x": paramAt[0], "y": paramAt[1]})
+	waitFor("the param card says it is empty", `(() => { const c = document.querySelector('.var-card.param'); return !!c && c.querySelector('.vc-name').textContent === '{id}' && c.textContent.includes('empty'); })()`)
+	clickText("set it from the card", ".var-card", "Set value")
+	must("type the value", d.eval(`(() => { const f = document.querySelector('.var-card .vc-form'); f.querySelector('input').value = '7'; f.requestSubmit(); })()`, nil))
+	waitFor("the filled path param", `!document.querySelector('.var-card') && document.querySelector('.urlbar .hl mark.param').className === 'param' && document.querySelector('#request input[aria-label="Value of id"]').value === '7'`)
 
 	clickText("show the request headers", "#request .subtabs", "Headers")
 	waitFor("the API key header row", `[...document.querySelectorAll('.headers-edit input[aria-label="Header name"]')].some((i) => i.value === 'X-API-Key')`)

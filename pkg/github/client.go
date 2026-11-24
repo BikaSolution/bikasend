@@ -69,6 +69,22 @@ func (c *Client) Releases(ctx context.Context, limit int) ([]Release, error) {
 	return releases, nil
 }
 
+func (c *Client) ReleaseByTag(ctx context.Context, tag string) (Release, error) {
+	var rel Release
+	resp, err := c.get(ctx, c.releasesURL+"/tags/"+url.PathEscape(tag), "application/vnd.github+json")
+	if err != nil {
+		return rel, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return rel, fmt.Errorf("%w: release %s: %s", ErrUpstream, tag, resp.Status)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxJSON)).Decode(&rel); err != nil {
+		return rel, errors.Join(ErrUpstream, err)
+	}
+	return rel, nil
+}
+
 // AssetURL returns GitHub's short-lived signed download URL for an asset. It holds no token.
 func (c *Client) AssetURL(ctx context.Context, id int64) (string, error) {
 	resp, err := c.get(ctx, c.releasesURL+"/assets/"+strconv.FormatInt(id, 10), "application/octet-stream")
@@ -90,7 +106,7 @@ func (c *Client) get(ctx context.Context, u, accept string) (*http.Response, err
 	}
 	req.Header.Set("Accept", accept)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "bikasend-site")
+	req.Header.Set("User-Agent", "bikasend")
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}

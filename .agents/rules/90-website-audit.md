@@ -41,7 +41,8 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Refuses secret-looking values in `.bika.json` | FAQ | `guardFileValue` in `core/variables.go` |
 | JSON tree, search, timing, images, spec check; copy as cURL, PowerShell, HTTPie, JavaScript or Python without secrets | Features | `app.js` `renderBody`; `core/validate.go`; `exporters` in `core/curl.go` |
 | Environments and hosts editor, "Always allow" for a host | README | `envPanel`, `send` in `app.js`; `CreateEnvironment`, `SetHosts` in `core/service.go` |
-| Update download, SHA-256 checked before saving | README | `DownloadUpdate` in `core/history.go` |
+| Version in the sidebar; update checked against the update site and GitHub, installed on a click | README | `renderVersion`, `updateDialog` in `app.js`; `DownloadUpdate`, `InstallUpdate` in `core/history.go`; `-X main.repo` in `release.yml` |
+| Path params highlighted, set from a hover card | README | `fillHighlight`, `showParamCard` in `app.js` |
 | The hero screenshot shows the current app | Hero | `static/app.webp`: retake it (generic example repo) when the UI changes |
 | Bodies pre-filled from examples, enums, defaults | Features | `example` in `core/swagger.go` |
 | Path, query, header params and auth headers set up | Features | `buildOperation` in `core/swagger.go` |

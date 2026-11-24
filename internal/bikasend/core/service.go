@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BikaSolution/bikasend/pkg/github"
 	"github.com/BikaSolution/bikasend/pkg/sdk/bikasend"
 	"github.com/BikaSolution/bikasend/pkg/sigv4"
 )
@@ -42,6 +43,15 @@ type Options struct {
 	Client    *http.Client // for token and update calls
 	// DownloadDir receives verified updates; "" means the user's Downloads folder.
 	DownloadDir string
+	// GitHub confirms update hashes; nil means the app only downloads updates.
+	GitHub     Releases
+	Executable func() (string, error)          // nil means os.Executable
+	Start      func(goos, target string) error // nil means startApp
+	GOOS       string                          // "" means runtime.GOOS
+}
+
+type Releases interface {
+	ReleaseByTag(ctx context.Context, tag string) (github.Release, error)
 }
 
 type sessionValue struct {
@@ -87,6 +97,7 @@ type Service struct {
 	creds   map[string]sigv4.Credentials
 	tokens  map[string]oauthToken
 	clients map[string]*http.Client
+	pending *pendingUpdate
 	jars    map[string]http.CookieJar
 
 	inflight map[string]context.CancelFunc
@@ -120,6 +131,7 @@ func NewService(opts Options) *Service {
 	s.awsCLI = opts.AWS(s.state.Settings.AWSCLI)
 	s.loadGlobal()
 	s.loadHistory()
+	s.removeOldExe()
 	return s
 }
 
