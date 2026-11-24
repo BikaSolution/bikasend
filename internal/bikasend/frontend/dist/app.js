@@ -573,32 +573,33 @@ function renderSide() {
   renderOps(list);
 }
 
-// urlSegments turns a pasted URL or path into lowercase path segments.
+// urlSegments splits a pasted URL into path segments. Cut by index: a regex like [?#].*$ is quadratic.
 function urlSegments(text) {
-  const path = text.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/, '').replace(/[?#].*$/, '');
+  let path = text.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/, '');
+  const end = path.search(/[?#]/);
+  if (end >= 0) path = path.slice(0, end);
   return path.split('/').filter(Boolean);
 }
 
-// pathMatches reports whether the URL ends with the spec path; {param} matches any segment.
-function pathMatches(path, word) {
-  if (!word.includes('/')) return false;
-  const tpl = urlSegments(path.toLowerCase());
-  const segs = urlSegments(word);
+// pathMatches reports whether the URL segments end with the spec path; {param} matches any segment.
+function pathMatches(path, segs) {
+  const tpl = path.toLowerCase().split('/').filter(Boolean);
   if (!tpl.length || tpl.length > segs.length) return false;
   const tail = segs.slice(segs.length - tpl.length);
-  return tpl.every((t, i) => /^\{[^/]*\}$/.test(t) || t === tail[i]);
+  return tpl.every((t, i) => (t.startsWith('{') && t.endsWith('}')) || t === tail[i]);
 }
 
 function renderOps(list) {
   const spec = currentSpec();
   const q = state.filter.toLowerCase().trim();
   const filtering = q !== '' || state.methods.length > 0;
+  const words = q ? q.split(/\s+/).map((w) => ({ w, segs: w.includes('/') ? urlSegments(w) : null })) : [];
   const groups = new Map();
   let shown = 0;
   for (const op of spec.operations) {
     if (state.methods.length && !state.methods.includes(op.method)) continue;
     const hay = (op.method + ' ' + op.path + ' ' + op.summary + ' ' + op.tag).toLowerCase();
-    if (q && !q.split(/\s+/).every((w) => hay.includes(w) || pathMatches(op.path, w))) continue;
+    if (!words.every(({ w, segs }) => hay.includes(w) || (segs && pathMatches(op.path, segs)))) continue;
     shown++;
     const tag = op.tag || 'Other';
     if (!groups.has(tag)) groups.set(tag, []);

@@ -46,8 +46,12 @@ const uiSpec = `{
   "components": {"securitySchemes": {"key": {"type": "apiKey", "in": "header", "name": "X-API-Key"}}},
   "security": [{"key": []}],
   "paths": {"/items/{id}": {"get": {"summary": "Get an item", "tags": ["items"], "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "ok"}}}},
-    "/orders": {"post": {"summary": "Create an order", "tags": ["orders"], "responses": {"201": {"description": "created"}}}}}
+    "/orders": {"post": {"summary": "Create an order", "tags": ["orders"], "responses": {"201": {"description": "created"}}}},
+    "/HOSTILE": {"get": {"tags": ["orders"], "responses": {"200": {"description": "ok"}}}}}
 }`
+
+// hostilePath made a [?#].*$ regex in the operation filter quadratic.
+var hostilePath = strings.Repeat("?", 100_000) + `\n`
 
 type noAWS struct{}
 
@@ -447,7 +451,7 @@ func TestUI(t *testing.T) {
 	defer backend.Close()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "openapi.json"), []byte(strings.ReplaceAll(uiSpec, "BACKEND", backend.URL)), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "openapi.json"), []byte(strings.NewReplacer("BACKEND", backend.URL, "HOSTILE", hostilePath).Replace(uiSpec)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	svc := core.NewService(core.Options{Version: "dev", ConfigDir: t.TempDir(), AWS: func(string) core.AWS { return noAWS{} }, Client: http.DefaultClient})
@@ -523,19 +527,23 @@ func TestUI(t *testing.T) {
 	waitFor("the app starts with the bridge", `!!document.querySelector('#open') && typeof openFolder === 'function' && !!window.go`)
 	rootJSON, _ := json.Marshal(root)
 	must("open the folder", d.eval(fmt.Sprintf("openFolder(%s)", rootJSON), nil))
-	waitFor("the operations are listed", `document.querySelectorAll('button.op').length === 2`)
+	waitFor("the operations are listed", `document.querySelectorAll('button.op').length === 3`)
 	shownPaths := `[...document.querySelectorAll('button.op .path')].map((p) => p.textContent).join()`
 	clickText("filter on POST", ".method-filter", "POST")
-	waitFor("only POST shows", shownPaths+` === '/orders' && document.querySelector('.match-count').textContent === '1 of 2 operations'`)
+	waitFor("only POST shows", shownPaths+` === '/orders' && document.querySelector('.match-count').textContent === '1 of 3 operations'`)
 	clickText("clear the method filter", ".method-filter", "POST")
-	waitFor("both show again", `document.querySelectorAll('button.op').length === 2 && !document.querySelector('.match-count')`)
-	filterBy := func(step, text string) {
-		must(step, d.eval(fmt.Sprintf(`(() => { const i = document.querySelector('input[aria-label="Filter operations"]'); i.value = %q; i.dispatchEvent(new Event('input')); })()`, text), nil))
+	waitFor("both show again", `document.querySelectorAll('button.op').length === 3 && !document.querySelector('.match-count')`)
+	filterBy := func(step, text string) float64 {
+		var ms float64
+		must(step, d.eval(fmt.Sprintf(`(() => { const i = document.querySelector('input[aria-label="Filter operations"]'); i.value = %q; const t = performance.now(); i.dispatchEvent(new Event('input')); return performance.now() - t; })()`, text), &ms))
+		return ms
 	}
-	filterBy("paste a URL", "http://localhost:8080/api/items/7?full=1")
+	if ms := filterBy("paste a URL", "http://localhost:8080/api/items/7?full=1"); ms > 1000 {
+		t.Errorf("filtering with a hostile spec path took %.0f ms", ms)
+	}
 	waitFor("the URL finds its operation", shownPaths+` === '/items/{id}'`)
 	filterBy("clear the filter", "")
-	waitFor("the filter clears", `document.querySelectorAll('button.op').length === 2`)
+	waitFor("the filter clears", `document.querySelectorAll('button.op').length === 3`)
 	must("open the operation", d.eval(`document.querySelector('button.op').click()`, nil))
 
 	// Text size: Ctrl + = grows it and saves the setting; Ctrl + 0 resets it.
