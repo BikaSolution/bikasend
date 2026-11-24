@@ -102,6 +102,10 @@ button:disabled { opacity: .55; cursor: default; }
 .side-body { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .side-body select, .side-body input[type=search] { width: 100%; }
 .ops { display: flex; flex-direction: column; gap: 2px; }
+.method-filter { display: flex; flex-wrap: wrap; gap: 4px; }
+.m-chip { min-width: 0; border: 1px solid var(--line-strong); border-radius: 999px; background: none; padding: 1px 8px; }
+.m-chip.on { background: var(--sel); border-color: currentColor; }
+.match-count { margin: 0; }
 .tag { margin-top: 4px; }
 .tag > summary { cursor: pointer; font-weight: 600; color: var(--soft); padding: 4px 2px; list-style: none; display: flex; justify-content: space-between; }
 .tag > summary::-webkit-details-marker { display: none; }

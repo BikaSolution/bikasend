@@ -40,6 +40,7 @@ const state = {
   specs: [],
   specIndex: -1,
   filter: '',
+  methods: [],
   sideTab: 'ops',
   history: [],
   tabs: [],
@@ -552,21 +553,53 @@ function renderSide() {
   }
   if (spec.error) body.append(h('div', { class: 'notice err' }, spec.error));
   const filter = h('input', {
-    type: 'search', placeholder: 'Filter operations', 'aria-label': 'Filter operations', value: state.filter,
+    type: 'search', placeholder: 'Filter by path, summary or a pasted URL', 'aria-label': 'Filter operations', value: state.filter,
     oninput: (e) => { state.filter = e.target.value; renderOps(list); },
   });
+  const present = [...new Set(spec.operations.map((op) => op.method))].sort((a, b) => METHODS.indexOf(a) - METHODS.indexOf(b));
+  state.methods = state.methods.filter((m) => present.includes(m));
+  const methods = present.length > 1 ? h('div', { class: 'method-filter', role: 'group', 'aria-label': 'Filter by method' }, present.map((m) => h('button', {
+    class: 'm-chip m ' + m + (state.methods.includes(m) ? ' on' : ''), 'aria-pressed': String(state.methods.includes(m)),
+    onclick: (e) => {
+      const on = !state.methods.includes(m);
+      state.methods = on ? [...state.methods, m] : state.methods.filter((x) => x !== m);
+      e.currentTarget.classList.toggle('on', on);
+      e.currentTarget.setAttribute('aria-pressed', String(on));
+      renderOps(list);
+    },
+  }, m))) : null;
   const list = h('div', { class: 'ops' });
-  body.append(filter, list);
+  body.append(filter, methods || '', list);
   renderOps(list);
+}
+
+// urlSegments turns a pasted URL or path into lowercase path segments.
+function urlSegments(text) {
+  const path = text.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/, '').replace(/[?#].*$/, '');
+  return path.split('/').filter(Boolean);
+}
+
+// pathMatches reports whether the URL ends with the spec path; {param} matches any segment.
+function pathMatches(path, word) {
+  if (!word.includes('/')) return false;
+  const tpl = urlSegments(path.toLowerCase());
+  const segs = urlSegments(word);
+  if (!tpl.length || tpl.length > segs.length) return false;
+  const tail = segs.slice(segs.length - tpl.length);
+  return tpl.every((t, i) => /^\{[^/]*\}$/.test(t) || t === tail[i]);
 }
 
 function renderOps(list) {
   const spec = currentSpec();
-  const q = state.filter.toLowerCase();
+  const q = state.filter.toLowerCase().trim();
+  const filtering = q !== '' || state.methods.length > 0;
   const groups = new Map();
+  let shown = 0;
   for (const op of spec.operations) {
+    if (state.methods.length && !state.methods.includes(op.method)) continue;
     const hay = (op.method + ' ' + op.path + ' ' + op.summary + ' ' + op.tag).toLowerCase();
-    if (q && !q.split(/\s+/).every((w) => hay.includes(w))) continue;
+    if (q && !q.split(/\s+/).every((w) => hay.includes(w) || pathMatches(op.path, w))) continue;
+    shown++;
     const tag = op.tag || 'Other';
     if (!groups.has(tag)) groups.set(tag, []);
     groups.get(tag).push(op);
@@ -575,7 +608,7 @@ function renderOps(list) {
   const activeOp = active && active.req.operation;
   list.replaceChildren(...[...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([tag, ops]) => {
     const key = 'tag:' + spec.path + ':' + tag;
-    const details = h('details', { class: 'tag', open: q !== '' || store.get(key) !== 'closed' },
+    const details = h('details', { class: 'tag', open: filtering || store.get(key) !== 'closed' },
       h('summary', {}, h('span', {}, tag, h('span', { class: 'badge' }, String(ops.length)))),
       ops.map((op) => h('button', {
         class: 'op' + (op.id === activeOp ? ' active' : '') + (op.deprecated ? ' deprecated' : ''),
@@ -586,10 +619,11 @@ function renderOps(list) {
       h('span', { class: 'path' }, op.path),
       op.deprecated ? h('span', { class: 'badge warn' }, 'deprecated') : null,
       op.summary ? h('span', { class: 'summary' }, op.summary) : null)));
-    details.addEventListener('toggle', () => { if (!q) store.set(key, details.open ? 'open' : 'closed'); });
+    details.addEventListener('toggle', () => { if (!filtering) store.set(key, details.open ? 'open' : 'closed'); });
     return details;
   }));
   if (!groups.size) list.append(h('p', { class: 'empty' }, 'No operation matches.'));
+  else if (filtering) list.prepend(h('p', { class: 'muted small match-count' }, `${shown} of ${spec.operations.length} operations`));
 }
 
 function renderHistory(body) {
@@ -615,6 +649,7 @@ function selectSpec(i) {
   const spec = currentSpec();
   if (spec && state.ws) store.set('spec:' + state.ws.root, spec.path);
   state.filter = '';
+  state.methods = [];
   renderSide();
 }
 

@@ -45,7 +45,8 @@ const uiSpec = `{
   "servers": [{"url": "BACKEND"}],
   "components": {"securitySchemes": {"key": {"type": "apiKey", "in": "header", "name": "X-API-Key"}}},
   "security": [{"key": []}],
-  "paths": {"/items/{id}": {"get": {"summary": "Get an item", "tags": ["items"], "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "ok"}}}}}
+  "paths": {"/items/{id}": {"get": {"summary": "Get an item", "tags": ["items"], "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "ok"}}}},
+    "/orders": {"post": {"summary": "Create an order", "tags": ["orders"], "responses": {"201": {"description": "created"}}}}}
 }`
 
 type noAWS struct{}
@@ -522,7 +523,19 @@ func TestUI(t *testing.T) {
 	waitFor("the app starts with the bridge", `!!document.querySelector('#open') && typeof openFolder === 'function' && !!window.go`)
 	rootJSON, _ := json.Marshal(root)
 	must("open the folder", d.eval(fmt.Sprintf("openFolder(%s)", rootJSON), nil))
-	waitFor("the operation is listed", `!!document.querySelector('button.op')`)
+	waitFor("the operations are listed", `document.querySelectorAll('button.op').length === 2`)
+	shownPaths := `[...document.querySelectorAll('button.op .path')].map((p) => p.textContent).join()`
+	clickText("filter on POST", ".method-filter", "POST")
+	waitFor("only POST shows", shownPaths+` === '/orders' && document.querySelector('.match-count').textContent === '1 of 2 operations'`)
+	clickText("clear the method filter", ".method-filter", "POST")
+	waitFor("both show again", `document.querySelectorAll('button.op').length === 2 && !document.querySelector('.match-count')`)
+	filterBy := func(step, text string) {
+		must(step, d.eval(fmt.Sprintf(`(() => { const i = document.querySelector('input[aria-label="Filter operations"]'); i.value = %q; i.dispatchEvent(new Event('input')); })()`, text), nil))
+	}
+	filterBy("paste a URL", "http://localhost:8080/api/items/7?full=1")
+	waitFor("the URL finds its operation", shownPaths+` === '/items/{id}'`)
+	filterBy("clear the filter", "")
+	waitFor("the filter clears", `document.querySelectorAll('button.op').length === 2`)
 	must("open the operation", d.eval(`document.querySelector('button.op').click()`, nil))
 
 	// Text size: Ctrl + = grows it and saves the setting; Ctrl + 0 resets it.

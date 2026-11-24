@@ -49,7 +49,7 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | No CORS: requests run natively | Features | `Send` in `internal/bikasend/core/service.go` |
 | About 10 MB, offline, no account, no telemetry | Features | `make app` output size; network calls in `frontend/dist/index.html` and `core/` |
 | Remembers the folder; base URL per spec | How it works | `load`/`store` keys in `frontend/dist/index.html` |
-| Filter by path, method or summary | How it works | `renderOps` in `frontend/dist/index.html` |
+| Filter by path or summary, toggle methods, paste a URL | How it works | `renderOps`, `pathMatches` and the method filter in `renderSide` (`app.js`) |
 | `⌘ Enter` / `Ctrl Enter` sends; status, time, size, headers, pretty JSON | How it works | `keydown` and `send` in `frontend/dist/index.html`; `Send` in `core/service.go` |
 | Platforms offered and architectures ("Universal", "64-bit") | Download | `matrix` in `.github/workflows/release.yml` |
 | Asset names map to macOS / Windows / Linux | Download | `out=` in `release.yml`; `platform` in `internal/site/core/service.go` |

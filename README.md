@@ -35,7 +35,8 @@ don't use.
 ## Features
 
 - **Open a folder, get every endpoint.** Scans the repo for Swagger and OpenAPI files, grouped by
-  tag. It skips `.git`, `node_modules` and `vendor`, and reloads when a spec changes.
+  tag. Filter by path or method, or paste a URL to find its operation. It skips `.git`,
+  `node_modules` and `vendor`, and reloads when a spec changes.
 - **Swagger 2.0 and OpenAPI 3.0 / 3.1**, JSON or YAML, with `$ref` across files and server
   variables.
 - **Bodies pre-filled** from the schema's examples, enums and defaults. Path and query
