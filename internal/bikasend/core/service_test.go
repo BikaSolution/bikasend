@@ -478,3 +478,139 @@ func envView(w bikasend.Workspace, name string) bikasend.EnvironmentView {
 	}
 	return bikasend.EnvironmentView{}
 }
+
+// openRoot opens root on s and closes it before TempDir cleanup, as Windows needs.
+func openRoot(t *testing.T, s *Service, root string) {
+	t.Helper()
+	if _, err := s.Open(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.root != nil {
+			_ = s.root.Close()
+		}
+	})
+}
+
+func TestTabs(t *testing.T) {
+	s, root := newTestService(t, "", "", nil)
+	if got := s.LoadTabs(); got.Tabs == nil || len(got.Tabs) != 0 {
+		t.Fatalf("no saved tabs must be an empty list: %#v", got)
+	}
+	secretReq := bikasend.Request{
+		ID: "t2-1", Method: http.MethodPost, URL: "{{baseUrl}}/items?token=abc&page=2", Headers: "X-API-Key: k-123\nAccept: {{accept}}",
+		BodyType: "json", Body: `{"password": "hunter2", "name": "a"}`, Form: []bikasend.Field{{Name: "file", Value: "/home/u/.ssh/id_rsa", File: true}},
+		AllowInsecure: true, AllowHost: "attacker.example.com", Server: "http://localhost:8080/v1", Operation: "swagger.json POST /items/{id}",
+	}
+	in := bikasend.OpenTabs{Active: 1, Tabs: []bikasend.SavedTab{
+		{Title: "Get item", Request: bikasend.Request{Method: http.MethodGet, URL: "{{baseUrl}}/items/7"}},
+		{Title: "POST /items?token=abc", Request: secretReq},
+	}}
+	if err := s.SaveTabs(in); err != nil {
+		t.Fatal(err)
+	}
+	if secretReq.Form[0].Value == "" {
+		t.Error("SaveTabs must not change the caller's request")
+	}
+	data, err := os.ReadFile(filepath.Join(s.opts.ConfigDir, tabsFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leak := range []string{"k-123", "hunter2", "abc", "id_rsa", "attacker"} {
+		if strings.Contains(string(data), leak) {
+			t.Errorf("%s on disk holds %q:\n%s", tabsFile, leak, data)
+		}
+	}
+
+	restarted := NewService(Options{ConfigDir: s.opts.ConfigDir, AWS: func(string) AWS { return &fakeAWS{} }})
+	openRoot(t, restarted, root)
+	got := restarted.LoadTabs()
+	if len(got.Tabs) != 2 || got.Active != 1 || got.Tabs[0].Title != "Get item" || got.Tabs[0].Request.URL != "{{baseUrl}}/items/7" {
+		t.Fatalf("restored tabs = %+v", got)
+	}
+	r := got.Tabs[1].Request
+	switch {
+	case r.ID != "" || r.AllowInsecure || r.AllowHost != "":
+		t.Errorf("a send confirmation outlived the session: %+v", r)
+	case r.Server != secretReq.Server || r.Operation != secretReq.Operation || r.Method != http.MethodPost:
+		t.Errorf("tab lost its operation or server: %+v", r)
+	case r.URL != "{{baseUrl}}/items?token="+maskText+"&page=2" || r.Headers != "X-API-Key: "+maskText+"\nAccept: {{accept}}":
+		t.Errorf("url %q, headers %q", r.URL, r.Headers)
+	case !strings.Contains(r.Body, `"name": "a"`) || !strings.Contains(r.Body, maskText) || r.Form[0].Value != "" || !r.Form[0].File:
+		t.Errorf("body %q, form %+v", r.Body, r.Form)
+	case got.Tabs[1].Title != "POST /items?token="+maskText:
+		t.Errorf("title = %q", got.Tabs[1].Title)
+	}
+
+	openRoot(t, restarted, t.TempDir())
+	if got := restarted.LoadTabs(); len(got.Tabs) != 0 {
+		t.Errorf("another folder sees the first folder's tabs: %+v", got)
+	}
+	if _, err := restarted.SaveSettings(bikasend.Settings{RestoreTabs: false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(s.opts.ConfigDir, tabsFile)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("turning restoreTabs off must remove %s: %v", tabsFile, err)
+	}
+	if err := restarted.SaveTabs(in); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(s.opts.ConfigDir, tabsFile)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("SaveTabs wrote with restoreTabs off: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(s.opts.ConfigDir, "settings.json"), []byte(`{"settings": {"theme": "dark"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if old := NewService(Options{ConfigDir: s.opts.ConfigDir, AWS: func(string) AWS { return &fakeAWS{} }}); !old.Workspace().Settings.RestoreTabs {
+		t.Error("a settings.json without restoreTabs must keep the default, on")
+	}
+}
+
+func TestTabLimits(t *testing.T) {
+	s, _ := newTestService(t, "", "", nil)
+	tab := func(body string) bikasend.SavedTab {
+		return bikasend.SavedTab{Title: strings.Repeat("t", maxTabTitle+50), Request: bikasend.Request{Method: http.MethodPost, BodyType: "json", Body: body}}
+	}
+	many := bikasend.OpenTabs{Active: maxTabs + 5}
+	for range maxTabs + 10 {
+		many.Tabs = append(many.Tabs, tab(`{"a": 1}`))
+	}
+	if err := s.SaveTabs(many); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.LoadTabs(); len(got.Tabs) != maxTabs || got.Active != 0 || len([]rune(got.Tabs[0].Title)) != maxTabTitle {
+		t.Errorf("tabs past the cap: %d tabs, active %d, title %d runes", len(got.Tabs), got.Active, len([]rune(got.Tabs[0].Title)))
+	}
+
+	big := `{"a": "` + strings.Repeat("x", maxTabBody-100) + `"}`
+	huge := bikasend.OpenTabs{Tabs: []bikasend.SavedTab{tab(`{"a": "` + strings.Repeat("x", maxTabBody) + `"}`)}}
+	for range 2 * maxTabsFile / maxTabBody {
+		huge.Tabs = append(huge.Tabs, tab(big))
+	}
+	if err := s.SaveTabs(huge); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(s.opts.ConfigDir, tabsFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() > maxTabsFile {
+		t.Errorf("%s is %d bytes, cap %d", tabsFile, info.Size(), maxTabsFile)
+	}
+	if got := s.LoadTabs(); len(got.Tabs) < 2 || len(got.Tabs) >= len(huge.Tabs) || got.Tabs[0].Request.Body != "" || got.Tabs[1].Request.Body == "" {
+		t.Errorf("a body over the cap must go and the file must fill up to its cap: %d of %d tabs", len(got.Tabs), len(huge.Tabs))
+	}
+
+	for i := range maxTabFolders + 2 {
+		openRoot(t, s, t.TempDir())
+		if err := s.SaveTabs(bikasend.OpenTabs{Tabs: []bikasend.SavedTab{tab(fmt.Sprintf(`{"n": %d}`, i))}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := s.readTabs(); len(got) != maxTabFolders || !strings.Contains(got[0].Tabs.Tabs[0].Request.Body, fmt.Sprint(maxTabFolders+1)) {
+		t.Errorf("folders past the cap: %d, want %d with the newest first", len(got), maxTabFolders)
+	}
+}

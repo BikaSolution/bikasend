@@ -125,7 +125,7 @@ func NewService(opts Options) *Service {
 		history:  []bikasend.HistoryEntry{},
 		aws:      bikasend.AWSStatus{State: "none"},
 		state: stored{
-			Settings: bikasend.Settings{Theme: "system", FontSize: 13, CheckUpdates: true},
+			Settings: bikasend.Settings{Theme: "system", FontSize: 13, CheckUpdates: true, RestoreTabs: true},
 			Recent:   []string{},
 			LastEnv:  map[string]string{},
 			Trusted:  map[string]string{},
@@ -837,6 +837,9 @@ func (s *Service) SaveSettings(in bikasend.Settings) (bikasend.Workspace, error)
 	if !in.SaveHistory {
 		_ = os.Remove(filepath.Join(s.opts.ConfigDir, "history.json"))
 	}
+	if !in.RestoreTabs {
+		_ = os.Remove(filepath.Join(s.opts.ConfigDir, tabsFile))
+	}
 	s.state.Settings = in
 	s.clients = map[string]*http.Client{}
 	s.saveState()
@@ -848,7 +851,8 @@ func (s *Service) loadState() {
 	if err != nil {
 		return
 	}
-	var st stored
+	// A settings.json from before restoreTabs existed keeps the default: on.
+	st := stored{Settings: bikasend.Settings{RestoreTabs: true}}
 	if json.Unmarshal(data, &st) != nil {
 		return
 	}
@@ -886,4 +890,140 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+const (
+	tabsFile      = "tabs.json"
+	maxTabs       = 30
+	maxTabFolders = 20
+	maxTabsFile   = 4 << 20
+	maxTabBody    = 1 << 20
+	maxTabTitle   = 200
+)
+
+type folderTabs struct {
+	Root string            `json:"root"`
+	Tabs bikasend.OpenTabs `json:"tabs"`
+}
+
+func (s *Service) LoadTabs() bikasend.OpenTabs {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.rootPath != "" && s.state.Settings.RestoreTabs {
+		for _, f := range s.readTabs() {
+			if f.Root == s.rootPath {
+				return f.Tabs
+			}
+		}
+	}
+	return bikasend.OpenTabs{Tabs: []bikasend.SavedTab{}}
+}
+
+// SaveTabs puts the open folder first and keeps other folders while the file stays under its cap.
+func (s *Service) SaveTabs(in bikasend.OpenTabs) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.rootPath == "" {
+		return bikasend.ErrNoFolder
+	}
+	if !s.state.Settings.RestoreTabs || s.opts.ConfigDir == "" {
+		return nil
+	}
+	older := slices.DeleteFunc(s.readTabs(), func(f folderTabs) bool { return f.Root == s.rootPath })
+	data, err := json.Marshal(fitTabs(folderTabs{Root: s.rootPath, Tabs: cleanTabs(in)}, older))
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(s.opts.ConfigDir, 0o700); err != nil {
+		return err
+	}
+	return writeAtomic(filepath.Join(s.opts.ConfigDir, tabsFile), data)
+}
+
+func (s *Service) readTabs() []folderTabs {
+	if s.opts.ConfigDir == "" {
+		return nil
+	}
+	data, err := readCapped(os.DirFS(s.opts.ConfigDir), tabsFile, maxTabsFile)
+	if err != nil {
+		return nil
+	}
+	var folders []folderTabs
+	if json.Unmarshal(data, &folders) != nil {
+		return nil
+	}
+	folders = folders[:min(len(folders), maxTabFolders)]
+	for i := range folders {
+		t := &folders[i].Tabs
+		t.Tabs = t.Tabs[:min(len(t.Tabs), maxTabs)]
+		if t.Tabs == nil {
+			t.Tabs = []bikasend.SavedTab{}
+		}
+		if t.Active < 0 || t.Active >= len(t.Tabs) {
+			t.Active = 0
+		}
+	}
+	return folders
+}
+
+// cleanTabs masks each request like history and drops what must not outlive the session:
+// send confirmations, upload paths and bodies over maxTabBody.
+func cleanTabs(in bikasend.OpenTabs) bikasend.OpenTabs {
+	tabs := in.Tabs[:min(len(in.Tabs), maxTabs)]
+	out := bikasend.OpenTabs{Tabs: make([]bikasend.SavedTab, 0, len(tabs)), Active: in.Active}
+	for _, t := range tabs {
+		r := t.Request
+		r.ID, r.AllowInsecure, r.AllowHost = "", false, ""
+		if len(r.Body) > maxTabBody {
+			r.Body = ""
+		}
+		r.Form = slices.Clone(r.Form)
+		for i := range r.Form {
+			if r.Form[i].File {
+				r.Form[i].Value = ""
+			}
+		}
+		title := []rune(scrubURL(t.Title))
+		out.Tabs = append(out.Tabs, bikasend.SavedTab{Title: string(title[:min(len(title), maxTabTitle)]), Request: scrubRequest(r)})
+	}
+	if out.Active < 0 || out.Active >= len(out.Tabs) {
+		out.Active = 0
+	}
+	return out
+}
+
+// fitTabs keeps the current folder's tabs in order, then older folders, within maxTabsFile.
+func fitTabs(cur folderTabs, older []folderTabs) []folderTabs {
+	left := maxTabsFile - 1<<10
+	size := func(v any) int {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return maxTabsFile
+		}
+		return len(b) + 1
+	}
+	kept := []bikasend.SavedTab{}
+	for _, t := range cur.Tabs.Tabs {
+		n := size(t)
+		if n > left {
+			break
+		}
+		left -= n
+		kept = append(kept, t)
+	}
+	out := []folderTabs{}
+	if len(kept) > 0 {
+		cur.Tabs.Tabs = kept
+		cur.Tabs.Active = min(cur.Tabs.Active, len(kept)-1)
+		out = append(out, cur)
+	}
+	for _, f := range older {
+		n := size(f)
+		if len(out) == maxTabFolders || n > left {
+			break
+		}
+		left -= n
+		out = append(out, f)
+	}
+	return out
 }

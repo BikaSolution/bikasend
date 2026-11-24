@@ -23,6 +23,7 @@ type Operation struct {
 	Body        string        `json:"body"`
 	Form        []Field       `json:"form"`
 	Responses   []ResponseDoc `json:"responses"`
+	BodyHints   []BodyHint    `json:"bodyHints"`
 }
 
 type Param struct {
@@ -178,6 +179,7 @@ type Settings struct {
 	CheckUpdates bool   `json:"checkUpdates"`
 	Proxy        string `json:"proxy"`
 	AWSCLI       string `json:"awsCli"`
+	RestoreTabs  bool   `json:"restoreTabs"`
 }
 
 type Workspace struct {
@@ -222,4 +224,24 @@ type UpdateDownload struct {
 	Target       string `json:"target"`
 	Installable  bool   `json:"installable"`
 	Reason       string `json:"reason"`
+}
+
+// BodyHint is what the request-body schema allows at one JSON path: "" is the root, "items[]" the
+// items of an array, "address.city" a nested property. Enum holds JSON literals such as "\"paid\"".
+type BodyHint struct {
+	Path string   `json:"path"`
+	Kind string   `json:"kind"`
+	Keys []string `json:"keys"`
+	Enum []string `json:"enum"`
+}
+
+// SavedTab is an open request tab kept for the next start. Secret-looking values are masked.
+type SavedTab struct {
+	Title   string  `json:"title"`
+	Request Request `json:"request"`
+}
+
+type OpenTabs struct {
+	Tabs   []SavedTab `json:"tabs"`
+	Active int        `json:"active"`
 }

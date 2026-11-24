@@ -43,6 +43,9 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | Environments and hosts editor, "Always allow" for a host | README | `envPanel`, `send` in `app.js`; `CreateEnvironment`, `SetHosts` in `core/service.go` |
 | Version in the top bar, lights up for an update; update check at start (can be turned off), checked against the update site, GitHub and the release signature, installed on a click | Features, FAQ, README | `renderVersion`, `versionClick`, `updateDialog` in `app.js`; `CheckUpdates` default in `core/service.go`; `CheckUpdate`, `DownloadUpdate`, `githubDigest`, `checkSignature`, `InstallUpdate` in `core/history.go`; `pkg/sign`; `-X main.repo` in `release.yml` |
 | Path params highlighted, set from a hover card | README | `fillHighlight`, `showParamCard` in `app.js` |
+| JSON body coloured; schema keys and enum values suggested | README | `jsonTokens`, `jsonCursor`, `checkJSONComplete` in `app.js`; `bodyHints` in `core/swagger.go` |
+| Copy a tree node's value or path; diff against the tab's previous response | README | `jsonTree`, `renderDiff`, `lineDiff` in `app.js` |
+| Tabs come back after a restart or update, secret-looking values masked, can be turned off | README | `saveTabs`, `restoreTabs`, `updateDialog`, `settingsDialog` in `app.js`; `LoadTabs`, `SaveTabs`, `cleanTabs` in `core/service.go`; `scrubRequest` in `core/history.go` |
 | The hero screenshot shows the current app | Hero | `static/app.webp`: retake it (generic example repo) when the UI changes |
 | Bodies pre-filled from examples, enums, defaults | Features | `example` in `core/swagger.go` |
 | Path, query, header params and auth headers set up | Features | `operation` in `core/swagger.go` |

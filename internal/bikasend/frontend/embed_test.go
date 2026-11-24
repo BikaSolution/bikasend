@@ -46,7 +46,8 @@ const uiSpec = `{
   "components": {"securitySchemes": {"key": {"type": "apiKey", "in": "header", "name": "X-API-Key"}}},
   "security": [{"key": []}],
   "paths": {"/items/{id}": {"get": {"summary": "Get an item", "tags": ["items"], "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "ok"}}}},
-    "/orders": {"post": {"summary": "Create an order", "tags": ["orders"], "responses": {"201": {"description": "created"}}}}}
+    "/orders": {"post": {"summary": "Create an order", "tags": ["orders"], "responses": {"201": {"description": "created"}},
+      "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"note": {"type": "string"}, "status": {"type": "string", "enum": ["new", "paid"]}}}}}}}}}
 }`
 
 type noAWS struct{}
@@ -435,14 +436,17 @@ func TestUI(t *testing.T) {
 
 	var mu sync.Mutex
 	var gotKey, gotPath string
+	var sends int
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		gotKey = r.Header.Get("X-API-Key")
 		gotPath = r.URL.Path
+		sends++
+		n := sends
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Echo", "yes")
-		_, _ = w.Write([]byte(`[{"id": 1}]`))
+		_, _ = fmt.Fprintf(w, `[{"id": %d}]`, n)
 	}))
 	defer backend.Close()
 
@@ -624,6 +628,40 @@ func TestUI(t *testing.T) {
 	clickText("show the response headers", "#response .subtabs", "Headers")
 	waitFor("the response headers table", `[...document.querySelectorAll('.headers-view th')].some((th) => th.textContent === 'X-Echo')`)
 
+	// Response tools: the backend answers with a new id each time; Diff shows the changed line.
+	clickText("open the diff before a second send", "#response .subtabs", "Diff")
+	waitFor("no previous response yet", `document.querySelector('#response .notice').textContent.startsWith('No previous response')`)
+	must("send again", d.eval(`document.querySelector('#sendBtn').click()`, nil))
+	waitFor("the second response", `[...document.querySelectorAll('#response .tree .leaf .n')].some((n) => n.textContent === '2')`)
+	clickText("open the diff", "#response .subtabs", "Diff")
+	waitFor("the diff marks the changed id", `(() => {
+		const lines = (cls) => [...document.querySelectorAll('#response .diff .' + cls)].map((l) => l.textContent.replace(/\s+/g, ' '));
+		return lines('del').join() === '- "id": 1' && lines('add').join() === '+ "id": 2';
+	})()`)
+	clickText("back to the body", "#response .subtabs", "Body")
+	must("record the clipboard", d.eval(`(() => {
+		const app = window.go.api.App;
+		window.go.api.App = new Proxy({}, { get: (_, m) => (m === 'CopyText' ? async (text) => { window.copied = text; } : app[m]) });
+	})()`, nil))
+	must("copy the path of the id", d.eval(`(() => {
+		const leaf = [...document.querySelectorAll('#response .tree .leaf')].find((l) => l.querySelector('.k') && l.querySelector('.k').textContent === '"id"');
+		[...leaf.querySelectorAll('.row-tools button')].find((b) => b.textContent === 'Copy path').click();
+	})()`, nil))
+	waitFor("the path is copied", `window.copied === '$[0].id' && document.querySelector('#toast').textContent === 'Path copied'`)
+
+	// JSON body: the editor colours keys and suggests the schema's keys, then its enum values.
+	must("open the operation with a body", d.eval(`[...document.querySelectorAll('button.op')].find((b) => b.querySelector('.path').textContent === '/orders').click()`, nil))
+	waitFor("the body is coloured", `[...document.querySelectorAll('#request .field.json .hl .jk')].some((k) => k.textContent === '"status"')`)
+	waitFor("the overlay holds the same text", `(() => { const f = document.querySelector('#request .field.json'); return f.querySelector('.hl').textContent === f.querySelector('textarea').value + '\n'; })()`)
+	must("clear the body", d.eval(`(() => { const ta = document.querySelector('#request .field.json textarea'); ta.value = ''; ta.dispatchEvent(new Event('input')); })()`, nil))
+	typeInto("start a key", "#request .field.json textarea", `{"st`)
+	suggestions := `[...document.querySelectorAll('#complete:not(.hidden) button .mono')].map((b) => b.textContent).join()`
+	waitFor("a key suggestion", suggestions+` === 'status'`)
+	call("pick it", "Input.dispatchKeyEvent", map[string]any{"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+	waitFor("the key and its enum values", `document.querySelector('#request .field.json textarea').value === '{"status": ' && `+suggestions+` === '"new","paid"'`)
+	call("close the suggestions", "Input.dispatchKeyEvent", map[string]any{"type": "keyDown", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27})
+	waitFor("the suggestions close", `document.querySelector('#complete').classList.contains('hidden')`)
+
 	// Environments: create one from the drawer, then give it a host.
 	must("open the variables drawer", d.eval(`document.querySelector('#varsBtn').click()`, nil))
 	waitFor("the environment panel", `!!document.querySelector('.env-panel')`)
@@ -639,6 +677,17 @@ func TestUI(t *testing.T) {
 	if err != nil || !strings.Contains(string(data), `"staging"`) || !strings.Contains(string(data), `"api.example.com"`) {
 		t.Errorf(".bika.json after the environment editor: %s, %v", data, err)
 	}
+
+	// Restart: the page reloads, reopens the folder and gets its tabs back from Go.
+	must("save the tabs", d.eval(`saveTabs().then(() => { window.oldPage = true; })`, nil))
+	call("restart the page", "Page.reload", nil)
+	waitFor("the tabs come back", `(() => {
+		const titles = [...document.querySelectorAll('#tabs .tab .title')].map((e) => e.textContent).join();
+		const active = document.querySelector('#tabs .tab.active .title');
+		return !window.oldPage && titles === 'Get an item,Create an order' && !!active && active.textContent === 'Create an order';
+	})()`)
+	must("switch to the first tab", d.eval(`document.querySelector('#tabs .tab').click()`, nil))
+	waitFor("it keeps its path param", `(() => { const i = document.querySelector('#request input[aria-label="Value of id"]'); return !!i && i.value === '7'; })()`)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()

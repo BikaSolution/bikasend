@@ -37,6 +37,10 @@ type Service interface {
 	History() []HistoryEntry
 	ClearHistory() error
 	SaveSettings(s Settings) (Workspace, error)
+	// LoadTabs returns the tabs saved for the open folder; none when RestoreTabs is off.
+	LoadTabs() OpenTabs
+	// SaveTabs keeps the open folder's tabs for the next start, masked like history on disk.
+	SaveTabs(t OpenTabs) error
 
 	// Export writes the request as curl, httpie, powershell, fetch or python; secrets become env references.
 	Export(r Request, format string) (string, error)

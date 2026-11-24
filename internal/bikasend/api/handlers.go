@@ -169,6 +169,14 @@ func (a *App) SaveSettings(s bikasend.Settings) (bikasend.Workspace, error) {
 	return a.svc.SaveSettings(s)
 }
 
+func (a *App) LoadTabs() bikasend.OpenTabs {
+	return a.svc.LoadTabs()
+}
+
+func (a *App) SaveTabs(t bikasend.OpenTabs) error {
+	return a.svc.SaveTabs(t)
+}
+
 func (a *App) Export(r bikasend.Request, format string) (string, error) {
 	return a.svc.Export(r, format)
 }

@@ -13,6 +13,9 @@
   --var-ok: #bae6fd; --var-secret: #ddd6fe; --var-missing: #fecaca; --var-param: #fde68a;
   --shadow: 0 8px 30px rgba(11, 22, 34, .18);
   --fs: 13px;
+  /* These follow the theme: the dark rules below redefine what they point at. */
+  --json-key: var(--put); --json-str: var(--ok); --json-num: var(--post); --json-lit: var(--patch);
+  --diff-add: color-mix(in srgb, var(--ok) 16%, var(--raised)); --diff-del: color-mix(in srgb, var(--err) 16%, var(--raised));
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -163,6 +166,15 @@ button:disabled { opacity: .55; cursor: default; }
 .hl mark.missing { background: var(--var-missing); }
 .hl mark.param { background: var(--var-param); }
 .hl mark.param.empty { box-shadow: inset 0 -2px 0 var(--warn); }
+/* A JSON body shows the overlay's coloured text; the textarea keeps the caret and the selection. */
+.field.json textarea { color: transparent; caret-color: var(--text); }
+.field.json textarea::selection { color: var(--text); background: var(--sel); }
+.field.json .hl { color: var(--text); }
+.field.json .hl mark { color: inherit; }
+/* Both always show a scrollbar, so both wrap lines at the same width. */
+.field.json textarea, .field.json .hl { overflow-x: hidden; overflow-y: scroll; }
+.hl .jk { color: var(--json-key); } .hl .js { color: var(--json-str); }
+.hl .jn { color: var(--json-num); } .hl .jl { color: var(--json-lit); }
 .subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); flex: none; }
 .subtab { border: 0; border-radius: 0; background: none; padding: 5px 10px; color: var(--muted); border-bottom: 2px solid transparent; }
 .subtab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
@@ -220,8 +232,16 @@ pre { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius
 .tree summary::before { content: "▾ "; color: var(--muted); }
 .tree details:not([open]) > summary::before { content: "▸ "; }
 .tree .leaf { margin-left: 28px; white-space: pre-wrap; word-break: break-all; }
-.tree .k { color: var(--put); }
-.tree .s { color: var(--ok); } .tree .n { color: var(--post); } .tree .b { color: var(--patch); } .tree .z { color: var(--muted); }
+.tree .k { color: var(--json-key); }
+.tree .s { color: var(--json-str); } .tree .n { color: var(--json-num); } .tree .b { color: var(--json-lit); } .tree .z { color: var(--muted); }
+.tree .row-tools { visibility: hidden; margin-left: 10px; font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif; font-size: .85em; }
+.tree .row-tools button { margin-right: 8px; }
+.tree .leaf:hover > .row-tools, .tree summary:hover > .row-tools, .tree .row-tools:focus-within { visibility: visible; }
+.diff { padding: 6px 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .95em; user-select: text; }
+.diff .dl { padding: 0 10px; white-space: pre-wrap; word-break: break-all; }
+.diff .add { background: var(--diff-add); }
+.diff .del { background: var(--diff-del); }
+.diff .gap { color: var(--muted); font-style: italic; }
 mark.find { background: #fde047; color: #000; }
 mark.find.current { background: #f97316; }
 .issues { margin: 0; padding-left: 18px; }

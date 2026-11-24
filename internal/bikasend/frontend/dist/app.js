@@ -50,6 +50,7 @@ const state = {
   editing: null,
   revealed: {},
   update: null,
+  openedRoot: null,
 };
 let tabSeq = 1;
 
@@ -113,26 +114,80 @@ function paramStatus(name, tab) {
   return p && p.value ? 'param' : 'param empty';
 }
 
-function fillHighlight(hl, text, tab, params) {
-  hl.replaceChildren();
-  let last = 0;
-  for (const m of text.matchAll(params ? URL_RE : VAR_RE)) {
-    hl.append(text.slice(last, m.index));
-    hl.append(m[1] ? h('mark', { class: varStatus(m[1], tab) }, m[0]) : m[2] ? h('mark', { class: paramStatus(m[2], tab) }, m[0]) : m[0]);
-    last = m.index + m[0].length;
+const MAX_JSON_TEXT = 200_000;
+const MAX_JSON_TOKENS = 20_000;
+
+// jsonTokens colours JSON in one pass. It never parses, so a half-typed body still gets colours.
+function jsonTokens(text) {
+  const out = [];
+  const n = text.length;
+  const space = (c) => c === ' ' || c === '\t' || c === '\r' || c === '\n';
+  let i = 0;
+  while (i < n && out.length < MAX_JSON_TOKENS) {
+    const c = text[i];
+    let j = i + 1;
+    if (c === '"') {
+      while (j < n && text[j] !== '"' && text[j] !== '\n') j += text[j] === '\\' ? 2 : 1;
+      j = Math.min(n, text[j] === '"' ? j + 1 : j);
+      let k = j;
+      while (k < n && space(text[k])) k++;
+      out.push({ start: i, end: j, cls: text[k] === ':' ? 'jk' : 'js' });
+    } else if (c === '-' || (c >= '0' && c <= '9')) {
+      while (j < n && /[0-9eE+.-]/.test(text[j])) j++;
+      out.push({ start: i, end: j, cls: 'jn' });
+    } else if (/[A-Za-z_]/.test(c)) {
+      while (j < n && /[A-Za-z0-9_]/.test(text[j])) j++;
+      if (/^(true|false|null)$/.test(text.slice(i, j))) out.push({ start: i, end: j, cls: 'jl' });
+    }
+    i = j;
   }
-  hl.append(text.slice(last) + '\n');
+  return out;
 }
 
-// varField is an input or textarea with {{variable}} highlighting and autocomplete.
-function varField({ value, multiline, placeholder, label, tab, onInput, className, params }) {
+// isJSONText is true for a JSON body type, or for 'auto' when the text starts like JSON.
+function isJSONText(json, text) {
+  return (json === true || (json === 'auto' && /^\s*[[{]/.test(text))) && text.length <= MAX_JSON_TEXT;
+}
+
+// fillHighlight copies text into the overlay character for character; marks and colours only wrap ranges.
+function fillHighlight(hl, text, tab, params, json) {
+  hl.replaceChildren();
+  const tokens = isJSONText(json, text) ? jsonTokens(text) : null;
+  if (hl.parentElement) hl.parentElement.classList.toggle('json', !!tokens);
+  let ti = 0;
+  const plain = (from, to) => {
+    if (!tokens) { hl.append(text.slice(from, to)); return; }
+    for (let i = from; i < to;) {
+      while (ti < tokens.length && tokens[ti].end <= i) ti++;
+      const t = tokens[ti];
+      const end = t && t.start <= i ? Math.min(t.end, to) : Math.min(t ? t.start : to, to);
+      hl.append(t && t.start <= i ? h('span', { class: t.cls }, text.slice(i, end)) : text.slice(i, end));
+      i = end;
+    }
+  };
+  let last = 0;
+  for (const m of text.matchAll(params ? URL_RE : VAR_RE)) {
+    plain(last, m.index);
+    last = m.index + m[0].length;
+    if (m[1]) hl.append(h('mark', { class: varStatus(m[1], tab) }, m[0]));
+    else if (m[2]) hl.append(h('mark', { class: paramStatus(m[2], tab) }, m[0]));
+    else plain(m.index, last);
+  }
+  plain(last, text.length);
+  hl.append('\n');
+}
+
+// varField is an input or textarea with {{variable}} highlighting and autocomplete. json colours
+// a JSON body (true, or 'auto' for text that starts like JSON); hints feed key and value suggestions.
+function varField({ value, multiline, placeholder, label, tab, onInput, className, params, json, hints }) {
   const hl = h('div', { class: 'hl', 'aria-hidden': 'true' });
   const input = multiline
     ? h('textarea', { spellcheck: 'false', placeholder, 'aria-label': label, value: value || '' })
     : h('input', { type: 'text', spellcheck: 'false', placeholder, 'aria-label': label, value: value || '', class: className });
   const wrap = h('div', { class: 'field' + (multiline ? '' : ' single') }, hl, input);
+  if (json && hints && hints.length) input._hints = new Map(hints.map((x) => [x.path, x]));
   const refresh = () => {
-    fillHighlight(hl, input.value, tab, params);
+    fillHighlight(hl, input.value, tab, params, json);
     hl.scrollTop = input.scrollTop;
     hl.scrollLeft = input.scrollLeft;
   };
@@ -176,16 +231,95 @@ function refreshVarMarks() {
 
 // ---------- Autocomplete ----------
 
-const complete = { input: null, items: [], index: 0, tab: null };
+// complete.json is set for a body suggestion: { at, quoted, key } says what applyComplete replaces.
+const complete = { input: null, items: [], index: 0, tab: null, json: null };
 
 function checkComplete(input, tab) {
   const pos = input.selectionStart;
   const m = input.value.slice(0, pos).match(/\{\{\s*([A-Za-z0-9_.$-]*)$/);
-  if (!m) return hideComplete();
+  if (!m) return input._hints ? checkJSONComplete(input, tab, pos) : hideComplete();
   const q = m[1].toLowerCase();
   const items = allVarNames(tab).filter(([n]) => n.toLowerCase().includes(q)).slice(0, 30);
   if (!items.length) return hideComplete();
-  Object.assign(complete, { input, items, index: 0, tab });
+  Object.assign(complete, { input, items, index: 0, tab, json: null });
+  placeComplete(input, pos);
+}
+
+// jsonCursor scans the body up to the cursor. It returns the JSON path of the innermost object or
+// array, whether a key or a value goes at the cursor, and the text typed so far.
+function jsonCursor(text) {
+  if (text.length > MAX_JSON_TEXT) return null;
+  const stack = [];
+  const n = text.length;
+  let at = n;
+  let quoted = false;
+  for (let i = 0; i < n;) {
+    const c = text[i];
+    const top = stack[stack.length - 1];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < n && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      if (j >= n) { at = i; quoted = true; break; }
+      if (top && !top.arr && top.expect === 'key') {
+        top.key = text.slice(i + 1, j);
+        top.keys.add(top.key);
+        top.expect = 'colon';
+      } else if (top) top.expect = 'next';
+      i = j + 1;
+      continue;
+    }
+    if (/[A-Za-z0-9_.+-]/.test(c)) {
+      let j = i + 1;
+      while (j < n && /[A-Za-z0-9_.+-]/.test(text[j])) j++;
+      if (j >= n) { at = i; break; }
+      if (top) top.expect = 'next';
+      i = j;
+      continue;
+    }
+    if (c === '{' || c === '[') stack.push({ arr: c === '[', key: null, expect: c === '[' ? 'value' : 'key', keys: new Set() });
+    else if (c === '}' || c === ']') {
+      stack.pop();
+      if (stack.length) stack[stack.length - 1].expect = 'next';
+    } else if (c === ':' && top && !top.arr) top.expect = 'value';
+    else if (c === ',' && top) {
+      top.expect = top.arr ? 'value' : 'key';
+      top.key = null;
+    }
+    i++;
+  }
+  const top = stack[stack.length - 1];
+  if (!top || (top.expect !== 'key' && top.expect !== 'value')) return null;
+  let path = '';
+  for (let k = 1; k < stack.length; k++) {
+    const parent = stack[k - 1];
+    path = parent.arr ? path + '[]' : (path ? path + '.' : '') + parent.key;
+  }
+  const typed = text.slice(at);
+  if (top.expect === 'key') return { key: true, path, typed, at, quoted, used: top.keys };
+  return { key: false, path: top.arr ? path + '[]' : (path ? path + '.' : '') + top.key, typed, at, quoted };
+}
+
+// checkJSONComplete suggests the schema's keys once a key is started, and enum values at a value.
+function checkJSONComplete(input, tab, pos) {
+  const cur = jsonCursor(input.value.slice(0, pos));
+  if (!cur || (cur.key && !cur.quoted && !cur.typed)) return hideComplete();
+  const hint = input._hints.get(cur.path);
+  const word = (cur.quoted ? cur.typed.slice(1) : cur.typed).toLowerCase();
+  let items = [];
+  if (cur.key) {
+    const child = (k) => input._hints.get((cur.path ? cur.path + '.' : '') + k);
+    items = ((hint && hint.keys) || []).filter((k) => !cur.used.has(k) && k.toLowerCase().startsWith(word))
+      .map((k) => [k, (child(k) || {}).kind || 'key']);
+  } else {
+    items = ((hint && hint.enum) || []).filter((v) => v !== cur.typed && v.toLowerCase().startsWith(cur.typed.toLowerCase()))
+      .map((v) => [v, hint.kind === 'boolean' ? 'boolean' : 'enum']);
+  }
+  if (!items.length) return hideComplete();
+  Object.assign(complete, { input, items: items.slice(0, 30), index: 0, tab, json: cur });
+  placeComplete(input, pos);
+}
+
+function placeComplete(input, pos) {
   const el = $('complete');
   const rect = input.getBoundingClientRect();
   let top = rect.bottom + 2;
@@ -211,6 +345,7 @@ function renderComplete() {
 function hideComplete() {
   $('complete').classList.add('hidden');
   complete.input = null;
+  complete.json = null;
 }
 
 function completeKey(e, input) {
@@ -232,8 +367,17 @@ function applyComplete(i) {
   if (!input) return;
   const name = complete.items[i][0];
   const pos = input.selectionStart;
-  const before = input.value.slice(0, pos).replace(/\{\{\s*[A-Za-z0-9_.$-]*$/, '{{' + name + '}}');
-  const after = input.value.slice(pos).replace(/^[A-Za-z0-9_.$-]*\s*\}\}/, '');
+  const cur = complete.json;
+  let before;
+  let after;
+  if (cur) {
+    // A key becomes "name": and the value suggestions follow; a value replaces what was typed.
+    before = input.value.slice(0, cur.at) + (cur.key ? JSON.stringify(name) + ': ' : name);
+    after = input.value.slice(pos).replace(cur.quoted ? (cur.key ? /^[^"\n,:{}[\]]*"(\s*:)?\s*/ : /^[^"\n,:{}[\]]*"/) : /^[A-Za-z0-9_.+-]*/, '');
+  } else {
+    before = input.value.slice(0, pos).replace(/\{\{\s*[A-Za-z0-9_.$-]*$/, '{{' + name + '}}');
+    after = input.value.slice(pos).replace(/^[A-Za-z0-9_.$-]*\s*\}\}/, '');
+  }
   input.value = before + after;
   input.selectionStart = input.selectionEnd = before.length;
   hideComplete();
@@ -284,11 +428,16 @@ function activeTab() {
 function tabTitle(t) {
   const found = t.req.operation && opById(t.req.operation);
   if (found && found.op.summary) return found.op.summary;
+  if (t.req.operation && !found && t.savedTitle) return t.savedTitle;
   return t.req.method + ' ' + t.req.url.replace('{{baseUrl}}', '');
 }
 
+function makeTab(req, server) {
+  return { id: 't' + tabSeq++, req: req || blankRequest(), server: server || serverFor(currentSpec()), sub: 'params', response: null, error: '', sending: false, resTab: 'body', bodyView: 'pretty', find: '', dirty: false };
+}
+
 function newTab(req, server) {
-  const tab = { id: 't' + tabSeq++, req: req || blankRequest(), server: server || serverFor(currentSpec()), sub: 'params', response: null, error: '', sending: false, resTab: 'body', bodyView: 'pretty', find: '', dirty: false };
+  const tab = makeTab(req, server);
   state.tabs.push(tab);
   state.active = tab.id;
   renderTabs();
@@ -324,11 +473,70 @@ function closeTab(id) {
   renderResponse();
 }
 
+// ---------- Saved tabs ----------
+// The webview sends templates; Go masks secret-looking values before it writes tabs.json.
+
+let tabSaveTimer = 0;
+let tabsSwitching = false;
+
+function keepsTabs() {
+  return !tabsSwitching && !!(state.ws && state.ws.root && state.ws.settings.restoreTabs);
+}
+
+function scheduleTabSave() {
+  if (!keepsTabs()) return;
+  clearTimeout(tabSaveTimer);
+  tabSaveTimer = setTimeout(saveTabs, 800);
+}
+
+async function saveTabs() {
+  clearTimeout(tabSaveTimer);
+  tabSaveTimer = 0;
+  if (!keepsTabs()) return;
+  const tabs = state.tabs.map((t) => ({ title: tabTitle(t), request: requestOf(t) }));
+  const active = Math.max(0, state.tabs.findIndex((t) => t.id === state.active));
+  try {
+    await api().SaveTabs({ tabs, active });
+  } catch (e) {
+    toast('Tabs not saved: ' + errText(e), true);
+  }
+}
+
+async function flushTabs() {
+  if (tabSaveTimer) await saveTabs();
+}
+
+// restoreTabs swaps in the folder's saved tabs and reports whether it did. On start, with none
+// saved, the open tabs stay.
+async function restoreTabs(switching) {
+  let saved;
+  try {
+    saved = await api().LoadTabs();
+  } catch {
+    return false;
+  }
+  if (!switching && !saved.tabs.length) return false;
+  for (const t of state.tabs) if (t.sending) api().Cancel(t.reqId);
+  state.tabs = saved.tabs.map((s) => {
+    const r = s.request;
+    const req = { method: r.method || 'GET', url: r.url || '', pathParams: r.pathParams || [], query: r.query || [], headers: r.headers || '',
+      bodyType: r.bodyType || 'none', body: r.body || '', form: r.form || [], auth: r.auth || '', operation: r.operation || '' };
+    return { ...makeTab(req, r.server), server: r.server || '', savedTitle: s.title, dirty: true };
+  });
+  const active = state.tabs[Math.min(saved.active, state.tabs.length - 1)];
+  state.active = active ? active.id : null;
+  return true;
+}
+
 function wireRequest(tab) {
-  const r = tab.req;
   tab.reqId = tab.id + '-' + Date.now();
+  return { ...requestOf(tab), id: tab.reqId };
+}
+
+function requestOf(tab) {
+  const r = tab.req;
   return {
-    id: tab.reqId,
+    id: '',
     method: r.method,
     url: r.url,
     pathParams: (r.pathParams || []).map((p) => ({ name: p.name, value: p.value || '', enabled: true })),
@@ -402,7 +610,10 @@ async function send(tab) {
   renderRequestButton();
   renderResponse();
   try {
-    tab.response = await api().Send(req);
+    const res = await api().Send(req);
+    // The Diff view compares with the last response that arrived, even across a failed send.
+    if (tab.lastOk) tab.prev = tab.lastOk;
+    tab.response = tab.lastOk = res;
     tab.resTab = 'body';
     tab.find = '';
   } catch (e) {
@@ -496,10 +707,12 @@ function updateDialog() {
   const d = up.download;
   const row = (label, hash, ok) => h('tr', {}, h('th', {}, label), h('td', { class: 'mono hash' }, hash || '—'),
     h('td', { class: ok ? 'ok' : 'err' }, ok ? '✓ matches' : '✗ not confirmed'));
+  const keep = keepsTabs();
   const install = h('button', { class: 'btn primary', onclick: async () => {
     install.disabled = true;
     install.textContent = 'Installing…';
     try {
+      if (keep) await saveTabs();
       await call('InstallUpdate');
     } catch {
       install.disabled = false;
@@ -513,7 +726,8 @@ function updateDialog() {
       row('Update site lists', d.siteSha256, d.siteSha256 === d.sha256),
       row('GitHub release lists', d.githubSha256, !!d.githubSha256 && d.githubSha256 === d.sha256))),
     d.installable
-      ? h('p', {}, 'Both match. Bikasend replaces ', h('span', { class: 'mono' }, d.target), ' and restarts. Open request tabs close.')
+      ? h('p', {}, 'Both match. Bikasend replaces ', h('span', { class: 'mono' }, d.target), ' and restarts. ',
+        keep ? 'Open request tabs come back after the restart, with secret-looking values masked.' : 'Open request tabs close.')
       : h('p', { class: 'notice warn' }, d.reason + '. Unzip the saved file and replace the app yourself, or use the download page.'),
     h('p', { class: 'muted small' }, 'Saved: ', h('span', { class: 'mono' }, d.path)),
     h('div', { class: 'buttons' },
@@ -721,6 +935,7 @@ function renderTabs() {
   h('span', { class: 'title' }, tabTitle(t)),
   h('button', { class: 'close', 'aria-label': 'Close tab', onclick: (e) => { e.stopPropagation(); closeTab(t.id); } }, '✕'))),
   h('button', { class: 'tab', title: `New tab (${MOD}T)`, 'aria-label': 'New tab', onclick: () => newTab() }, '+'));
+  scheduleTabSave();
 }
 
 function renderRequestButton() {
@@ -734,6 +949,7 @@ function renderRequestButton() {
 function renderRequest() {
   const el = $('request');
   el.replaceChildren();
+  scheduleTabSave();
   const tab = activeTab();
   if (!tab) {
     el.append(welcome());
@@ -850,7 +1066,7 @@ function paneHeaders(pane, tab) {
   if (!rows.length) pane.append(h('p', { class: 'muted' }, 'No headers yet. Auth headers from the spec appear here when you open an operation.'));
 }
 
-function paneBody(pane, tab) {
+function paneBody(pane, tab, op) {
   const r = tab.req;
   const type = h('select', { 'aria-label': 'Body type', onchange: (e) => { r.bodyType = e.target.value; tab.dirty = true; renderRequest(); } },
     BODY_TYPES.map(([v, l]) => h('option', { value: v, selected: v === r.bodyType }, l)));
@@ -869,7 +1085,8 @@ function paneBody(pane, tab) {
         } catch { toast('The body is not valid JSON (variables outside strings break JSON).', true); }
       } }, 'Format JSON'));
     }
-    pane.append(varField({ value: r.body, multiline: true, label: 'Body', tab, onInput: (v) => { r.body = v; } }));
+    pane.append(varField({ value: r.body, multiline: true, label: 'Body', tab, json: r.bodyType === 'json' || (r.bodyType === 'text' && 'auto'),
+      hints: r.bodyType === 'json' && op ? op.bodyHints : null, onInput: (v) => { r.body = v; } }));
     return;
   }
   const tbody = h('tbody');
@@ -1249,6 +1466,7 @@ function renderResponse() {
 
   const tabs = [['body', 'Body'], ['headers', 'Headers']];
   if (tab.req.operation) tabs.push(['check', 'Spec check', res.issues.length]);
+  tabs.push(['diff', 'Diff']);
   el.append(h('div', { class: 'subtabs' }, tabs.map(([k, l, n]) => h('button', {
     class: 'subtab' + (tab.resTab === k ? ' active' : ''), onclick: () => { tab.resTab = k; renderResponse(); },
   }, l, n ? h('span', { class: 'badge warn' }, String(n)) : (k === 'check' ? h('span', { class: 'badge' }, '✓') : null)))));
@@ -1265,6 +1483,8 @@ function renderResponse() {
     el.append(res.issues.length
       ? h('div', { class: 'resbody' }, h('ul', { class: 'issues' }, res.issues.map((i) => h('li', {}, i))))
       : h('div', { class: 'notice' }, 'The response matches the spec for status ' + res.statusCode + '.'));
+  } else if (tab.resTab === 'diff') {
+    renderDiff(el, tab, res);
   } else {
     renderBody(el, tab, res);
   }
@@ -1345,6 +1565,16 @@ function renderBody(el, tab, res) {
   draw();
 }
 
+function copyText(text, done) {
+  call('CopyText', text).then(() => toast(done), () => { /* call already showed the error */ });
+}
+
+// jsonPath names a child the way JSONPath does: $.items[0].name, or $["odd key"].
+function jsonPath(parent, key) {
+  if (typeof key === 'number') return `${parent}[${key}]`;
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
+}
+
 function jsonTree(value) {
   let budget = 5000;
   const leaf = (v) => {
@@ -1353,21 +1583,115 @@ function jsonTree(value) {
     if (typeof v === 'number') return h('span', { class: 'n' }, String(v));
     return h('span', { class: 'b' }, String(v));
   };
-  const node = (key, v, depth) => {
+  // tools copy what the tree shows: Go already redacted loaded secrets from the body.
+  const tools = (v, path) => {
+    const btn = (label, text, done) => h('button', { class: 'link', type: 'button', onclick: (e) => { e.preventDefault(); e.stopPropagation(); copyText(text(), done); } }, label);
+    return h('span', { class: 'row-tools' },
+      btn('Copy value', () => (typeof v === 'string' ? v : JSON.stringify(v, null, 2)), 'Value copied'),
+      btn('Copy path', () => path, 'Path copied'));
+  };
+  const node = (key, v, depth, path) => {
     budget--;
-    const label = key === null ? [] : [h('span', { class: 'k' }, JSON.stringify(key)), ': '];
-    if (v === null || typeof v !== 'object') return h('div', { class: 'leaf' }, label, leaf(v));
+    const label = key === null || typeof key === 'number' ? [] : [h('span', { class: 'k' }, JSON.stringify(key)), ': '];
+    if (v === null || typeof v !== 'object') return h('div', { class: 'leaf' }, label, leaf(v), tools(v, path));
     const isArr = Array.isArray(v);
     const entries = isArr ? v.map((x, i) => [i, x]) : Object.entries(v);
-    const summary = h('summary', {}, label, isArr ? `[${entries.length}]` : `{${entries.length}}`);
+    const summary = h('summary', {}, label, isArr ? `[${entries.length}]` : `{${entries.length}}`, tools(v, path));
     const d = h('details', { open: depth < 2 }, summary);
     for (const [k, x] of entries) {
       if (budget <= 0) { d.append(h('div', { class: 'leaf muted' }, '… switch to Raw to see the rest')); break; }
-      d.append(node(isArr ? null : k, x, depth + 1));
+      d.append(node(k, x, depth + 1, jsonPath(path, k)));
     }
     return d;
   };
-  return h('div', { class: 'tree' }, node(null, value, 0));
+  return h('div', { class: 'tree' }, node(null, value, 0, '$'));
+}
+
+const MAX_DIFF_LINES = 3000;
+const MAX_DIFF_CELLS = 2_000_000;
+const DIFF_CONTEXT = 3;
+
+function prettyBody(res) {
+  if (res.bodyBase64) return null;
+  if (/json/.test(res.contentType) && res.body.length < 2_000_000) {
+    try { return JSON.stringify(JSON.parse(res.body), null, 2); } catch { /* not JSON: compare the raw text */ }
+  }
+  return res.body;
+}
+
+// lineDiff returns [op, line] pairs with op ' ', '-' or '+', or a reason when the work is too big.
+// It trims the common head and tail, then runs LCS on the rest within MAX_DIFF_CELLS.
+function lineDiff(a, b) {
+  if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) return `Not compared: a body has more than ${MAX_DIFF_LINES} lines.`;
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  const x = a.slice(head, a.length - tail);
+  const y = b.slice(head, b.length - tail);
+  if (x.length * y.length > MAX_DIFF_CELLS) return 'Not compared: too many lines changed.';
+  const w = y.length + 1;
+  const lcs = new Uint16Array((x.length + 1) * w);
+  for (let i = x.length - 1; i >= 0; i--) {
+    for (let j = y.length - 1; j >= 0; j--) {
+      lcs[i * w + j] = x[i] === y[j] ? lcs[(i + 1) * w + j + 1] + 1 : Math.max(lcs[(i + 1) * w + j], lcs[i * w + j + 1]);
+    }
+  }
+  const out = a.slice(0, head).map((l) => [' ', l]);
+  let i = 0;
+  let j = 0;
+  while (i < x.length && j < y.length) {
+    if (x[i] === y[j]) { out.push([' ', x[i]]); i++; j++; }
+    else if (lcs[(i + 1) * w + j] >= lcs[i * w + j + 1]) out.push(['-', x[i++]]);
+    else out.push(['+', y[j++]]);
+  }
+  while (i < x.length) out.push(['-', x[i++]]);
+  while (j < y.length) out.push(['+', y[j++]]);
+  for (const l of a.slice(a.length - tail)) out.push([' ', l]);
+  return out;
+}
+
+// renderDiff compares this response with the tab's previous one; both stay in memory only.
+function renderDiff(el, tab, res) {
+  const prev = tab.prev;
+  if (!prev) {
+    el.append(h('div', { class: 'notice' }, 'No previous response. Send again to compare.'));
+    return;
+  }
+  el.append(h('p', { class: 'muted small' }, `Previous: ${prev.status} · ${prev.durationMs} ms → now: ${res.status} · ${res.durationMs} ms`));
+  const a = prettyBody(prev);
+  const b = prettyBody(res);
+  if (a === null || b === null) {
+    el.append(h('div', { class: 'notice' }, 'Binary bodies are not compared.'));
+    return;
+  }
+  const d = lineDiff(a.split('\n'), b.split('\n'));
+  if (typeof d === 'string') {
+    el.append(h('div', { class: 'notice' }, d));
+    return;
+  }
+  if (!d.some(([op]) => op !== ' ')) {
+    el.append(h('div', { class: 'notice' }, 'The body is the same as the previous response.'));
+    return;
+  }
+  const box = h('div', { class: 'diff' });
+  const line = ([op, text]) => h('div', { class: 'dl' + (op === '+' ? ' add' : op === '-' ? ' del' : '') }, op + ' ' + text);
+  for (let i = 0; i < d.length;) {
+    if (d[i][0] !== ' ') { box.append(line(d[i++])); continue; }
+    let end = i;
+    while (end < d.length && d[end][0] === ' ') end++;
+    const keepHead = i === 0 ? 0 : DIFF_CONTEXT;
+    const keepTail = end === d.length ? 0 : DIFF_CONTEXT;
+    if (end - i > keepHead + keepTail + 1) {
+      for (let k = i; k < i + keepHead; k++) box.append(line(d[k]));
+      box.append(h('div', { class: 'dl gap' }, `… ${end - i - keepHead - keepTail} unchanged lines`));
+      for (let k = end - keepTail; k < end; k++) box.append(line(d[k]));
+    } else {
+      for (let k = i; k < end; k++) box.append(line(d[k]));
+    }
+    i = end;
+  }
+  el.append(h('div', { class: 'resbody' }, box));
 }
 
 const EXPORTS = [['curl', 'cURL'], ['powershell', 'PowerShell'], ['httpie', 'HTTPie'], ['fetch', 'JavaScript fetch'], ['python', 'Python requests']];
@@ -1762,12 +2086,14 @@ function settingsDialog() {
       e.preventDefault();
       applyWS(await call('SaveSettings', s));
       close();
+      scheduleTabSave();
       toast('Settings saved');
     },
   }, h('h2', {}, 'Settings'),
   h('label', {}, 'Theme', h('select', { onchange: (e) => { s.theme = e.target.value; } }, ['system', 'light', 'dark'].map((t) => h('option', { value: t, selected: s.theme === t }, t[0].toUpperCase() + t.slice(1))))),
   h('label', {}, 'Font size', h('input', { type: 'number', min: '10', max: '20', value: String(s.fontSize), oninput: (e) => { s.fontSize = Number(e.target.value); } })),
   h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.saveHistory, onchange: (e) => { s.saveHistory = e.target.checked; } }), 'Save history to disk (secret-looking values are masked)'),
+  h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.restoreTabs, onchange: (e) => { s.restoreTabs = e.target.checked; } }), 'Reopen tabs on start (secret-looking values are masked)'),
   h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.checkUpdates, onchange: (e) => { s.checkUpdates = e.target.checked; } }), 'Check for updates on start'),
   h('label', {}, 'Proxy (optional)', h('input', { type: 'text', value: s.proxy, placeholder: 'http://proxy.example.com:3128', oninput: (e) => { s.proxy = e.target.value; } })),
   h('label', {}, 'aws CLI path (optional)', h('input', { type: 'text', value: s.awsCli, placeholder: state.ws.aws.cli || 'not found', oninput: (e) => { s.awsCli = e.target.value; } })),
@@ -1872,23 +2198,34 @@ async function pickFolder() {
 }
 
 async function openFolder(root) {
+  // Tabs belong to their folder: save the old folder's before Go switches, and none until the new ones load.
+  const prev = state.openedRoot;
+  if (prev && prev !== root) await flushTabs();
+  tabsSwitching = true;
+  let restored = false;
   try {
-    state.specs = await api().Open(root);
-  } catch (e) {
-    toast(errText(e), true);
-    return;
+    try {
+      state.specs = await api().Open(root);
+    } catch (e) {
+      toast(errText(e), true);
+      return;
+    }
+    state.ws = await api().Workspace();
+    const last = store.get('spec:' + root);
+    const i = state.specs.findIndex((s) => s.path === last);
+    state.specIndex = i >= 0 ? i : (state.specs.length ? 0 : -1);
+    restored = prev !== root && state.ws.settings.restoreTabs && await restoreTabs(!!prev);
+    state.openedRoot = root;
+  } finally {
+    tabsSwitching = false;
   }
-  state.ws = await api().Workspace();
-  const last = store.get('spec:' + root);
-  const i = state.specs.findIndex((s) => s.path === last);
-  state.specIndex = i >= 0 ? i : (state.specs.length ? 0 : -1);
   applyWS(state.ws);
   renderSide();
-  if (!state.tabs.length) {
+  renderTabs();
+  // A rescan keeps the open request as it is, so a field being typed in keeps its focus.
+  if (restored || !state.tabs.length) {
     renderRequest();
     renderResponse();
-  } else {
-    renderTabs();
   }
   if (needsAWS() && state.ws.aws.state === 'none') loadSecrets(false);
 }
@@ -1968,6 +2305,9 @@ function wire() {
     else if (e.key === 'Escape' && varCard.el) hideVarCard();
     else if (e.key === 'Escape' && $('drawer').classList.contains('open') && !$('dialog').open) closeDrawer();
   });
+  $('request').addEventListener('input', scheduleTabSave);
+  $('request').addEventListener('change', scheduleTabSave);
+  window.addEventListener('beforeunload', () => { flushTabs(); });
   $('versionBtn').addEventListener('click', versionClick);
   window.addEventListener('scroll', (e) => { if (varCard.el && !varCard.editing && !varCard.el.contains(e.target)) hideVarCard(); }, true);
   window.addEventListener('blur', () => { if (!varCard.editing) hideVarCard(); });

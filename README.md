@@ -40,7 +40,8 @@ don't use.
 - **Swagger 2.0 and OpenAPI 3.0 / 3.1**, JSON or YAML, with `$ref` across files and server
   variables.
 - **Bodies pre-filled** from the schema's examples, enums and defaults. Path and query
-  parameters get their own form. JSON, text, XML, form and multipart (file upload) bodies.
+  parameters get their own form. JSON, text, XML, form and multipart (file upload) bodies. The
+  JSON editor colours the body and suggests the schema's keys and enum values as you type.
 - **`{{variables}}` everywhere**, highlighted as you type, with autocomplete. Hover a variable to
   see where it comes from, reveal a secret with a click, or open it in the AWS console. Path
   params like `{id}` get their own colour, underlined until filled in; hover one to set it.
@@ -51,10 +52,13 @@ don't use.
 - **AWS secrets, loaded into memory.** Reference AWS Secrets Manager or Parameter Store values.
   Bikasend loads them through your own `aws` CLI and SSO login. Nothing secret is ever committed.
 - **Auth helpers.** OAuth2 client credentials and AWS SigV4 signing per environment.
-- **Responses that explain themselves.** JSON tree, search, timing breakdown, image preview, and
-  a check against the spec's response schema.
-- **History, tabs, command palette (`⌘K`), cURL import.** Copy any request as cURL, PowerShell,
-  HTTPie, JavaScript `fetch` or Python `requests`; secrets become environment variable references.
+- **Responses that explain themselves.** JSON tree (copy any value or its path, like
+  `$.items[0].name`), search, timing breakdown, image preview, a diff against the tab's previous
+  response, and a check against the spec's response schema.
+- **History, tabs, command palette (`⌘K`), cURL import.** Open tabs come back after a restart or
+  an update, with secret-looking values masked; turn that off in Settings. Copy any request as
+  cURL, PowerShell, HTTPie, JavaScript `fetch` or Python `requests`; secrets become environment
+  variable references.
   `⌘ +` / `⌘ −` (`Ctrl` on Windows and Linux) change the text size.
 - **Updates you can trust.** The version sits in the top bar and lights up when a new one is out. Click it and
   Bikasend downloads it for your platform and checks its SHA-256 against both the update site and
