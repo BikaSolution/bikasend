@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -105,6 +106,7 @@ func TestDownloadUpdate(t *testing.T) {
 	s.opts.UpdateURL = site.URL
 	dir := t.TempDir()
 	s.opts.DownloadDir = dir
+	s.opts.GitHub = &fakeReleases{rel: github.Release{TagName: "v9.9.9", Assets: []github.Asset{{Name: name, Digest: "sha256:" + good}}}}
 
 	s.opts.Version = "v9.9.9"
 	entry = dl(plat, name, good, "/downloads/v9.9.9/"+name)
@@ -116,11 +118,8 @@ func TestDownloadUpdate(t *testing.T) {
 	entry = dl(plat, name, good, "/downloads/v9.9.9/"+name)
 	for _, want := range []string{name, "Bikasend-v9.9.9-test-1.zip"} {
 		res, err := s.DownloadUpdate(context.Background())
-		if err != nil || res.Path != filepath.Join(dir, want) || res.SHA256 != good || res.SiteSHA256 != good {
+		if err != nil || res.Path != filepath.Join(dir, want) || res.SHA256 != good || res.SiteSHA256 != good || res.GitHubSHA256 != good {
 			t.Fatalf("download = %+v, %v; want %s", res, err, want)
-		}
-		if res.Installable || !strings.Contains(res.Reason, "GitHub") {
-			t.Errorf("without a GitHub repo the update must not install: %+v", res)
 		}
 		if data, _ := os.ReadFile(res.Path); string(data) != string(payload) {
 			t.Errorf("%s holds %q", want, data)
@@ -308,51 +307,77 @@ func TestInstallUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("GitHub disagrees", func(t *testing.T) {
-		exe := filepath.Join(t.TempDir(), "Bikasend")
-		writeFile(t, exe, "old")
-		s, gh, _ := setup(t, "linux", exe, makeZip(t, zipEntry{"Bikasend", 0o755, "new"}))
-		gh.rel.Assets[0].Digest = "sha256:" + strings.Repeat("0", 64)
-		if _, err := s.DownloadUpdate(ctx); !errors.Is(err, bikasend.ErrUpdate) {
-			t.Errorf("a GitHub mismatch must fail: %v", err)
-		}
-		if left, _ := os.ReadDir(s.opts.DownloadDir); len(left) != 0 {
-			t.Error("a download GitHub disagrees with must be removed")
-		}
-		if err := s.InstallUpdate(ctx); !errors.Is(err, bikasend.ErrUpdate) {
-			t.Errorf("nothing may install: %v", err)
-		}
-	})
-
 	for _, tt := range []struct {
-		name  string
-		spoil func(t *testing.T, s *Service, gh *fakeReleases, exe string)
+		name    string
+		deleted bool
+		spoil   func(s *Service, gh *fakeReleases)
 	}{
-		{name: "GitHub unreachable", spoil: func(_ *testing.T, _ *Service, gh *fakeReleases, _ string) { gh.err = errors.New("offline") }},
-		{name: "a draft on GitHub", spoil: func(_ *testing.T, _ *Service, gh *fakeReleases, _ string) { gh.rel.Draft = true }},
-		{name: "no digest on GitHub", spoil: func(_ *testing.T, _ *Service, gh *fakeReleases, _ string) { gh.rel.Assets[0].Digest = "" }},
-		{name: "no GitHub repo", spoil: func(_ *testing.T, s *Service, _ *fakeReleases, _ string) { s.opts.GitHub = nil }},
-		{name: "macOS outside a bundle", spoil: func(_ *testing.T, s *Service, _ *fakeReleases, _ string) {
-			s.opts.GOOS, plat = "darwin", platformNames["darwin"]
-		}},
-		{name: "no running app", spoil: func(_ *testing.T, s *Service, _ *fakeReleases, _ string) {
+		{name: "GitHub disagrees", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.rel.Assets[0].Digest = "sha256:" + strings.Repeat("0", 64) }},
+		{name: "GitHub unreachable", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.err = errors.New("offline") }},
+		{name: "a draft on GitHub", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.rel.Draft = true }},
+		{name: "a prerelease on GitHub", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.rel.Prerelease = true }},
+		{name: "no digest on GitHub", deleted: true, spoil: func(_ *Service, gh *fakeReleases) { gh.rel.Assets[0].Digest = "" }},
+		{name: "no GitHub repo", deleted: true, spoil: func(s *Service, _ *fakeReleases) { s.opts.GitHub = nil }},
+		{name: "macOS outside a bundle", spoil: func(s *Service, _ *fakeReleases) { s.opts.GOOS, plat = "darwin", platformNames["darwin"] }},
+		{name: "no running app", spoil: func(s *Service, _ *fakeReleases) {
 			s.opts.Executable = func() (string, error) { return "", errors.New("unknown") }
 		}},
 	} {
-		t.Run(tt.name+" saves but does not install", func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			exe := filepath.Join(t.TempDir(), "Bikasend")
 			writeFile(t, exe, "old")
 			s, gh, started := setup(t, "linux", exe, makeZip(t, zipEntry{"Bikasend", 0o755, "new"}))
-			tt.spoil(t, s, gh, exe)
+			// An earlier checked download must not stay installable after this one.
+			if res, err := s.DownloadUpdate(ctx); err != nil || !res.Installable {
+				t.Fatalf("first download = %+v, %v", res, err)
+			}
+			tt.spoil(s, gh)
 			res, err := s.DownloadUpdate(ctx)
-			if err != nil || res.Installable || res.Reason == "" || readFile(res.Path) == "" {
-				t.Fatalf("download = %+v, %v", res, err)
+			left, _ := os.ReadDir(s.opts.DownloadDir)
+			if tt.deleted && (!errors.Is(err, bikasend.ErrUpdate) || len(left) != 1) {
+				t.Errorf("an unconfirmed zip must fail and be deleted: %v, %d files", err, len(left))
+			}
+			if !tt.deleted && (err != nil || res.Installable || res.Reason == "" || readFile(res.Path) == "") {
+				t.Errorf("a confirmed zip it cannot install stays saved: %+v, %v", res, err)
 			}
 			if err := s.InstallUpdate(ctx); !errors.Is(err, bikasend.ErrUpdate) || readFile(exe) != "old" || len(*started) != 0 {
 				t.Errorf("install = %v, binary %q, started %v", err, readFile(exe), *started)
 			}
 		})
 	}
+
+	t.Run("a failed swap keeps the previous app", func(t *testing.T) {
+		apps := t.TempDir()
+		bundle := filepath.Join(apps, "Bikasend.app")
+		writeFile(t, filepath.Join(bundle, "Contents", "MacOS", "Bikasend"), "old")
+		s, _, started := setup(t, "darwin", filepath.Join(bundle, "Contents", "MacOS", "Bikasend"),
+			makeZip(t, zipEntry{"Bikasend.app/Contents/MacOS/Bikasend", 0o755, "new"}))
+		if res, err := s.DownloadUpdate(ctx); err != nil || !res.Installable {
+			t.Fatalf("download = %+v, %v", res, err)
+		}
+		defer func() { rename = os.Rename }()
+		calls := 0
+		rename = func(from, to string) error {
+			if calls++; calls == 1 {
+				return os.Rename(from, to)
+			}
+			return errors.New("disk full")
+		}
+		err := s.InstallUpdate(ctx)
+		if !errors.Is(err, bikasend.ErrUpdate) || !strings.Contains(err.Error(), "previous.app") || len(*started) != 0 {
+			t.Fatalf("install = %v, started %v", err, *started)
+		}
+		var kept []string
+		_ = filepath.WalkDir(apps, func(p string, d fs.DirEntry, _ error) error {
+			if !d.IsDir() && readFile(p) == "old" {
+				kept = append(kept, p)
+			}
+			return nil
+		})
+		if len(kept) != 1 {
+			t.Errorf("the previous app must survive a failed swap, found %v", kept)
+		}
+	})
 
 	t.Run("a zip changed after the check", func(t *testing.T) {
 		exe := filepath.Join(t.TempDir(), "Bikasend")

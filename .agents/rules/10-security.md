@@ -48,8 +48,9 @@ that crosses a boundary updates it in the same PR.
   cannot push code. The user sees both hashes and clicks "Update and restart". `InstallUpdate`
   takes no path from the webview: it installs the file `DownloadUpdate` checked, hashes it again,
   unpacks only the expected names through `os.Root` (no links, no paths out, size and file caps)
-  and swaps it in with renames. Without a repo, a GitHub answer or a writable app folder it only
-  saves the zip.
+  and swaps it in with renames. A zip GitHub does not confirm (no repo, no answer, a draft or
+  prerelease, no digest, another hash) is deleted: the app saved it, so Gatekeeper and SmartScreen
+  would never check it. A confirmed zip the app cannot install (folder not writable) stays saved.
 - **Hosts lists change only on an explicit click** ("Always allow" when there is no list, or the
   environment editor). A host outside a non-empty list is refused; the send dialog only offers to
   open the editor, never to send. Show hosts as Go parsed them (`Preview.Host`).

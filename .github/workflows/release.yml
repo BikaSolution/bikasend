@@ -91,7 +91,7 @@ jobs:
           out="Bikasend-${TAG}-${NAME}.zip"
           cd build/bikasend/bin
           case "$RUNNER_OS" in
-            macOS) ditto -c -k --keepParent Bikasend.app "$out" ;;
+            macOS) ditto -c -k --norsrc --noextattr --noacl --keepParent Bikasend.app "$out" ;;
             Windows) 7z a -tzip "$out" Bikasend.exe ;;
             Linux) zip "$out" Bikasend ;;
           esac

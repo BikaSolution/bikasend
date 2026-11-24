@@ -276,6 +276,9 @@ var (
 // SHA-256 against the update site's latest.json. It returns the saved file's path.
 func (s *Service) DownloadUpdate(ctx context.Context) (bikasend.UpdateDownload, error) {
 	var out bikasend.UpdateDownload
+	s.mu.Lock()
+	s.pending = nil
+	s.mu.Unlock()
 	if s.opts.UpdateURL == "" || s.opts.Client == nil {
 		return out, fmt.Errorf("%w: this build has no update site", bikasend.ErrUpdate)
 	}
@@ -347,15 +350,16 @@ func (s *Service) DownloadUpdate(ctx context.Context) (bikasend.UpdateDownload, 
 	out = bikasend.UpdateDownload{Tag: latest.Tag, Path: dest, SHA256: got, SiteSHA256: dl.SHA256}
 
 	// GitHub is a second source for the hash: a hacked update site alone cannot pass both checks.
-	out.GitHubSHA256, err = s.githubDigest(ctx, latest.Tag, dl.Name)
+	// An unconfirmed zip is deleted: saved by the app, it would skip Gatekeeper and SmartScreen.
+	gh, err := s.githubDigest(ctx, latest.Tag, dl.Name)
+	if err == nil && gh != got {
+		err = fmt.Errorf("GitHub lists SHA-256 %s, the download has %s", gh, got)
+	}
 	if err != nil {
-		out.Reason = "GitHub could not confirm the SHA-256: " + err.Error()
-		return out, nil
-	}
-	if out.GitHubSHA256 != got {
 		_ = os.Remove(dest)
-		return out, fmt.Errorf("%w: GitHub lists SHA-256 %s for %s, the download has %s; the file was removed", bikasend.ErrUpdate, out.GitHubSHA256, dl.Name, got)
+		return bikasend.UpdateDownload{}, fmt.Errorf("%w: GitHub did not confirm %s (%w); the file was removed, try again later or use the download page", bikasend.ErrUpdate, dl.Name, err)
 	}
+	out.GitHubSHA256 = gh
 	out.Target, err = s.installTarget()
 	if err != nil {
 		out.Reason = err.Error()
@@ -396,7 +400,7 @@ func (s *Service) githubDigest(ctx context.Context, tag, name string) (string, e
 	if err != nil {
 		return "", err
 	}
-	if rel.Draft || rel.TagName != tag {
+	if rel.Draft || rel.Prerelease || rel.TagName != tag {
 		return "", fmt.Errorf("GitHub has no published release %s", tag)
 	}
 	for _, a := range rel.Assets {
@@ -414,6 +418,9 @@ func (s *Service) githubDigest(ctx context.Context, tag, name string) (string, e
 type pendingUpdate struct {
 	path, sha256, target string
 }
+
+// rename is a variable so tests can make the swap fail.
+var rename = os.Rename
 
 // maxInstall caps the unpacked app; the zip itself is capped by maxUpdate.
 var maxInstall int64 = 200 << 20
@@ -443,7 +450,7 @@ func (s *Service) installTarget() (string, error) {
 	target := exe
 	if s.goos() == "darwin" {
 		target = filepath.Dir(filepath.Dir(filepath.Dir(exe)))
-		if filepath.Ext(target) != ".app" || filepath.Base(filepath.Dir(exe)) != "MacOS" {
+		if filepath.Ext(target) != ".app" || filepath.Base(filepath.Dir(exe)) != "MacOS" || filepath.Base(filepath.Dir(filepath.Dir(exe))) != "Contents" {
 			return "", errors.New("the app is not running from a .app bundle")
 		}
 	}
@@ -461,48 +468,19 @@ func (s *Service) installTarget() (string, error) {
 func (s *Service) InstallUpdate(context.Context) error {
 	s.mu.Lock()
 	p := s.pending
+	s.pending = nil
 	s.mu.Unlock()
 	if p == nil {
 		return fmt.Errorf("%w: download and check an update first", bikasend.ErrUpdate)
 	}
-	f, err := os.Open(p.path)
-	if err != nil {
+	if err := install(s.goos(), p); err != nil {
+		s.mu.Lock()
+		if s.pending == nil {
+			s.pending = p
+		}
+		s.mu.Unlock()
 		return errors.Join(bikasend.ErrUpdate, err)
 	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return errors.Join(bikasend.ErrUpdate, err)
-	}
-	if info.Size() > maxUpdate {
-		return fmt.Errorf("%w: the download is larger than %d MB", bikasend.ErrUpdate, maxUpdate>>20)
-	}
-	// Hash the open file again and unpack from the same handle: the zip sat in Downloads meanwhile.
-	sum := sha256.New()
-	if _, err := io.Copy(sum, io.NewSectionReader(f, 0, info.Size())); err != nil {
-		return errors.Join(bikasend.ErrUpdate, err)
-	}
-	if hex.EncodeToString(sum.Sum(nil)) != p.sha256 {
-		return fmt.Errorf("%w: %s changed after it was checked", bikasend.ErrUpdate, p.path)
-	}
-	zr, err := zip.NewReader(f, info.Size())
-	if err != nil {
-		return errors.Join(bikasend.ErrUpdate, err)
-	}
-	switch s.goos() {
-	case "darwin":
-		err = installBundle(zr, p.target)
-	case "windows":
-		err = installExe(zr, p.target, "Bikasend.exe", true)
-	default:
-		err = installExe(zr, p.target, "Bikasend", false)
-	}
-	if err != nil {
-		return errors.Join(bikasend.ErrUpdate, err)
-	}
-	s.mu.Lock()
-	s.pending = nil
-	s.mu.Unlock()
 	start := s.opts.Start
 	if start == nil {
 		start = startApp
@@ -511,6 +489,41 @@ func (s *Service) InstallUpdate(context.Context) error {
 		return fmt.Errorf("%w: the update is installed but did not start; start Bikasend again: %w", bikasend.ErrUpdate, err)
 	}
 	return nil
+}
+
+func install(goos string, p *pendingUpdate) error {
+	f, err := os.Open(p.path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if info.Size() > maxUpdate {
+		return fmt.Errorf("the download is larger than %d MB", maxUpdate>>20)
+	}
+	// Hash the open file again and unpack from the same handle: the zip sat in Downloads meanwhile.
+	sum := sha256.New()
+	if _, err := io.Copy(sum, io.NewSectionReader(f, 0, info.Size())); err != nil {
+		return err
+	}
+	if hex.EncodeToString(sum.Sum(nil)) != p.sha256 {
+		return fmt.Errorf("%s changed after it was checked", p.path)
+	}
+	zr, err := zip.NewReader(f, info.Size())
+	if err != nil {
+		return err
+	}
+	switch goos {
+	case "darwin":
+		return installBundle(zr, p.target)
+	case "windows":
+		return installExe(zr, p.target, "Bikasend.exe", true)
+	default:
+		return installExe(zr, p.target, "Bikasend", false)
+	}
 }
 
 // installExe swaps in the one binary the zip holds. Windows cannot overwrite a running .exe but
@@ -535,17 +548,19 @@ func installExe(zr *zip.Reader, target, name string, windows bool) error {
 		if err := os.Chmod(tmp.Name(), 0o755); err != nil { // #nosec G302 -- the app binary must be executable.
 			return err
 		}
-		return os.Rename(tmp.Name(), target)
+		return rename(tmp.Name(), target)
 	}
 	old := target + ".old"
 	if err := os.Remove(old); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := os.Rename(target, old); err != nil {
+	if err := rename(target, old); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp.Name(), target); err != nil {
-		_ = os.Rename(old, target)
+	if err := rename(tmp.Name(), target); err != nil {
+		if rerr := rename(old, target); rerr != nil {
+			return fmt.Errorf("%w; the previous app is at %s", err, old)
+		}
 		return err
 	}
 	return nil
@@ -560,7 +575,12 @@ func installBundle(zr *zip.Reader, bundle string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(stage) }()
+	keep := false
+	defer func() {
+		if !keep {
+			_ = os.RemoveAll(stage)
+		}
+	}()
 	root, err := os.OpenRoot(stage)
 	if err != nil {
 		return err
@@ -606,11 +626,14 @@ func installBundle(zr *zip.Reader, bundle string) error {
 		return errors.New("the zip holds no Bikasend.app/Contents/MacOS/Bikasend")
 	}
 	old := filepath.Join(stage, "previous.app")
-	if err := os.Rename(bundle, old); err != nil {
+	if err := rename(bundle, old); err != nil {
 		return err
 	}
-	if err := os.Rename(filepath.Join(stage, "Bikasend.app"), bundle); err != nil {
-		_ = os.Rename(old, bundle)
+	if err := rename(filepath.Join(stage, "Bikasend.app"), bundle); err != nil {
+		if rerr := rename(old, bundle); rerr != nil {
+			keep = true
+			return fmt.Errorf("%w; the previous app is at %s", err, old)
+		}
 		return err
 	}
 	return nil
@@ -659,7 +682,11 @@ func (s *Service) removeOldExe() {
 	if executable == nil {
 		executable = os.Executable
 	}
-	if exe, err := executable(); err == nil {
+	exe, err := executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err == nil {
 		_ = os.Remove(exe + ".old")
 	}
 }
