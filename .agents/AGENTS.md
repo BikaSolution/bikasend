@@ -108,6 +108,14 @@ docs/threat-model.md             # Assets, trust boundaries, threats and mitigat
 
 ## Releases
 
+Pick the version by what changed since the last tag:
+
+- **A new feature** (anything the user can see or do that they could not before): minor bump,
+  patch to 0. `v0.1.11` → `v0.2.0`.
+- **Only fixes, upgrades** (Go, Wails, dependencies, images) **or docs**: patch bump. `v0.2.0` →
+  `v0.2.1`.
+- **Major** stays `0` until the human decides on `1.0`.
+
 1. `make release VERSION=v0.2.0`: checks the branch, tree and version, runs vet and tests, asks,
    bumps `productVersion` in `wails.json` if needed, then pushes the tag (UTC timestamps).
 2. `release.yml` creates the GitHub release with generated notes, builds on native macOS, Windows

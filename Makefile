@@ -58,9 +58,10 @@ endif
 release:
 	@set -euo pipefail; \
 	last="$$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)"; \
-	next="$$(echo "$$last" | awk -F. '{printf "%s.%s.%d", $$1, $$2, $$3 + 1}')"; \
+	feature="$$(echo "$$last" | awk -F. '{printf "%s.%d.0", $$1, $$2 + 1}')"; \
+	fix="$$(echo "$$last" | awk -F. '{printf "%s.%s.%d", $$1, $$2, $$3 + 1}')"; \
 	v="$(VERSION)"; \
-	if [ -z "$$v" ]; then echo "usage: make release VERSION=$$next   (last release: $$last)"; exit 1; fi; \
+	if [ -z "$$v" ]; then echo "usage: make release VERSION=$$feature (new feature) or VERSION=$$fix (fixes, upgrades); last release: $$last"; exit 1; fi; \
 	[[ "$$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { echo "VERSION must look like v1.2.3, got $$v"; exit 1; }; \
 	[ "$$(git branch --show-current)" = main ] || { echo "release from main only"; exit 1; }; \
 	[ -z "$$(git status --porcelain)" ] || { echo "commit or stash your changes first"; exit 1; }; \
