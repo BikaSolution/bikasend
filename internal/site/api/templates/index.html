@@ -40,7 +40,7 @@
     </div>
     <div class="visual">
     <img class="mascot" src="/static/mascot.webp" width="520" height="563" alt="">
-    <img class="shot" src="/static/app.webp" width="800" height="496" alt="Bikasend showing the operations of an example API, a request using {{"{{baseUrl}}"}} and a masked API key, and a JSON response.">
+    <img class="shot" src="/static/app.webp" width="800" height="496" alt="Bikasend in dark mode: the operations of an example API with method filters, a GET {{"{{baseUrl}}"}}/items/{id} request with the {id} path parameter highlighted and a masked API key, and a 200 JSON response.">
     </div>
   </div>
 </section>
@@ -80,7 +80,7 @@
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 4 14h7l-1 7 9-11h-7Z"/></svg></div>
         <h3>Small and fast</h3>
-        <p>About 10 MB, starts instantly and uses your system’s own web view. It works offline, with no account and no telemetry.</p>
+        <p>About 10 MB, starts instantly and uses your system’s own web view. It works offline, with no account and no telemetry. The only call it makes on its own is an update check, which you can turn off in Settings.</p>
       </div>
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4c-2 0-3 1-3 3v2c0 1-1 2-2 3 1 1 2 2 2 3v2c0 2 1 3 3 3M17 4c2 0 3 1 3 3v2c0 1 1 2 2 3-1 1-2 2-2 3v2c0 2-1 3-3 3M9 9l6 6M15 9l-6 6"/></svg></div>
@@ -95,7 +95,7 @@
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6Z"/></svg></div>
         <h3>Responses checked against the spec</h3>
-        <p>See a JSON tree, search, timing and images, plus every place the response breaks its schema. Copy any request as cURL, PowerShell, HTTPie, JavaScript or Python, with secrets left out.</p>
+        <p>See a JSON tree, search, timing and images, plus every place the response breaks its schema. Copy any request as cURL, PowerShell, HTTPie, JavaScript or Python; secrets become environment variables.</p>
       </div>
     </div>
   </div>
@@ -225,6 +225,10 @@
       <summary>How do I verify a download?</summary>
       <p>Compare the SHA-256 shown next to each download with your file. On macOS and Linux run <code>shasum -a 256 &lt;file&gt;</code>. On Windows run <code>Get-FileHash &lt;file&gt;</code> in PowerShell. Don’t run the file if they don’t match.</p>{{with .Repo}}
       <p>To check that our CI built the file from the tagged source, run <code>gh attestation verify &lt;file&gt; --repo {{.}}</code> with the GitHub CLI. Releases from v0.1.4 onwards carry this signed build provenance.</p>{{end}}
+    </details>
+    <details>
+      <summary>How do updates work?</summary>
+      <p>Bikasend asks this site for a new version when it starts; you can turn that off in Settings. The version in the top bar lights up when one is out. Click it and Bikasend downloads the build for your system, checks its SHA-256 against this site and against the GitHub release, and shows you both. It replaces the app and restarts only when both match and you click. If GitHub can’t confirm the file, Bikasend deletes it.</p>
     </details>
     <details>
       <summary>Which Swagger files does it read?</summary>

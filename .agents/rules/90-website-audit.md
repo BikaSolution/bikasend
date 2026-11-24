@@ -39,22 +39,22 @@ A change in one of these areas that leaves the site wrong is a **Blocker** in re
 | AWS Secrets Manager and Parameter Store through the user's `aws` CLI | Features, FAQ | `pkg/awscli`; `LoadSecrets` in `core/http.go` |
 | Secrets only to listed hosts, not over plain http, not along cross-host redirects | Features | `guard` and `CheckRedirect` in `core/http.go` |
 | Refuses secret-looking values in `.bika.json` | FAQ | `guardFileValue` in `core/variables.go` |
-| JSON tree, search, timing, images, spec check; copy as cURL, PowerShell, HTTPie, JavaScript or Python without secrets | Features | `app.js` `renderBody`; `core/validate.go`; `exporters` in `core/curl.go` |
+| JSON tree, search, timing, images, spec check; copy as cURL, PowerShell, HTTPie, JavaScript or Python, secrets as environment variables | Features | `app.js` `renderBody`; `core/validate.go`; `exporters` in `core/curl.go` |
 | Environments and hosts editor, "Always allow" for a host | README | `envPanel`, `send` in `app.js`; `CreateEnvironment`, `SetHosts` in `core/service.go` |
-| Version in the sidebar; update checked against the update site and GitHub, installed on a click | README | `renderVersion`, `updateDialog` in `app.js`; `DownloadUpdate`, `InstallUpdate` in `core/history.go`; `-X main.repo` in `release.yml` |
+| Version in the top bar, lights up for an update; update check at start (can be turned off), checked against the update site and GitHub, installed on a click | Features, FAQ, README | `renderVersion`, `versionClick`, `updateDialog` in `app.js`; `CheckUpdates` default in `core/service.go`; `CheckUpdate`, `DownloadUpdate`, `githubDigest`, `InstallUpdate` in `core/history.go`; `-X main.repo` in `release.yml` |
 | Path params highlighted, set from a hover card | README | `fillHighlight`, `showParamCard` in `app.js` |
 | The hero screenshot shows the current app | Hero | `static/app.webp`: retake it (generic example repo) when the UI changes |
 | Bodies pre-filled from examples, enums, defaults | Features | `example` in `core/swagger.go` |
-| Path, query, header params and auth headers set up | Features | `buildOperation` in `core/swagger.go` |
-| Secrets stay in memory, never on disk or in logs | Features | `remembered` and `store` in `frontend/dist/index.html`; `10-security.md` |
-| No CORS: requests run natively | Features | `Send` in `internal/bikasend/core/service.go` |
-| About 10 MB, offline, no account, no telemetry | Features | `make app` output size; network calls in `frontend/dist/index.html` and `core/` |
-| Remembers the folder; base URL per spec | How it works | `load`/`store` keys in `frontend/dist/index.html` |
+| Path, query, header params and auth headers set up | Features | `operation` in `core/swagger.go` |
+| Secrets stay in memory, never on disk or in logs | Features | `store` in `app.js` (no secrets); `scrubRequest` in `core/history.go`; `10-security.md` |
+| No CORS: requests run natively | Features | `Send` in `core/http.go` |
+| About 10 MB, offline, no account, no telemetry; the only own call is the update check | Features, README | `make app` output size; `api()` calls in `app.js`; `CheckUpdate`, `latestRelease` in `core/history.go` |
+| Remembers the folder; base URL per spec | How it works | `store` keys `server:`, `spec:` in `app.js`; `Recent` in `core/service.go` |
 | Filter by path or summary, toggle methods, paste a URL | How it works | `renderOps`, `pathMatches` and the method filter in `renderSide` (`app.js`) |
-| `⌘ Enter` / `Ctrl Enter` sends; status, time, size, headers, pretty JSON | How it works | `keydown` and `send` in `frontend/dist/index.html`; `Send` in `core/service.go` |
+| `⌘ Enter` / `Ctrl Enter` sends; status, time, size, headers, pretty JSON | How it works | the `keydown` handler in `wire` and `send` in `app.js`; `Send` in `core/http.go` |
 | Platforms offered and architectures ("Universal", "64-bit") | Download | `matrix` in `.github/workflows/release.yml` |
 | Asset names map to macOS / Windows / Linux | Download | `out=` in `release.yml`; `platform` in `internal/site/core/service.go` |
-| macOS minimum version | Download | Go release notes for the `go` version in `go.mod` (Go sets the macOS floor) |
+| macOS minimum version | Download | Go release notes for the `go` version in `go.mod` (Go sets the macOS floor); `LSMinimumSystemVersion` in `build/bikasend/darwin/Info.plist` must match |
 | Windows 10/11, WebView2 runtime | Download, FAQ | Wails version in `go.mod`, its platform docs |
 | Linux GTK 3 + WebKitGTK 4.1 package names | Download, FAQ | `-tags webkit2_41` and `apt-get install` line in `release.yml` |
 | Builds come from CI, from a tagged release | Download | `release.yml` trigger |

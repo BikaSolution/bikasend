@@ -522,12 +522,28 @@ function updateDialog() {
       d.installable ? install : null)));
 }
 
+// renderVersion shows the version in the top bar; it lights up when an update is available.
 function renderVersion() {
-  const el = $('sideFoot');
-  if (!el || !state.ws) return;
+  const b = $('versionBtn');
+  if (!b || !state.ws) return;
   const up = state.update;
-  el.replaceChildren(h('span', { class: 'muted small version' }, 'Bikasend ' + state.ws.version),
-    up && up.available ? h('button', { class: 'update-pill', disabled: !!up.busy, title: `You have ${up.current}`, onclick: startUpdate }, up.busy ? 'Checking…' : `Update to ${up.latest}`) : null);
+  const available = !!(up && up.available);
+  b.classList.toggle('update', available);
+  b.disabled = !!(up && up.busy);
+  b.textContent = available ? (up.busy ? 'Checking…' : `Update to ${up.latest}`) : state.ws.version;
+  b.title = available ? `You have ${up.current}. Download, check and install ${up.latest}.` : `Bikasend ${state.ws.version}. Click to check for updates.`;
+}
+
+async function versionClick() {
+  if (state.update && state.update.available) { startUpdate(); return; }
+  if (!state.ws.settings.checkUpdates) { toast('Update checks are off. Turn them on in Settings.'); return; }
+  try {
+    const up = await api().CheckUpdate();
+    if (up.available) { state.update = up; renderBanners(); return; }
+    toast(up.latest ? `Bikasend ${up.current} is the latest version.` : 'This build does not check for updates.');
+  } catch (e) {
+    toast(errText(e), true);
+  }
 }
 
 function renderBanners() {
@@ -1931,6 +1947,7 @@ function wire() {
     else if (e.key === 'Escape' && varCard.el) hideVarCard();
     else if (e.key === 'Escape' && $('drawer').classList.contains('open') && !$('dialog').open) closeDrawer();
   });
+  $('versionBtn').addEventListener('click', versionClick);
   window.addEventListener('scroll', (e) => { if (varCard.el && !varCard.editing && !varCard.el.contains(e.target)) hideVarCard(); }, true);
   window.addEventListener('blur', () => { if (!varCard.editing) hideVarCard(); });
   document.addEventListener('mousedown', (e) => { if (varCard.el && varCard.editing && !varCard.el.contains(e.target)) hideVarCard(); });

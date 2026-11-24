@@ -27,8 +27,8 @@
 
 ---
 
-Bikasend opens a repo of services, finds every `swagger.json` and
-`openapi.json` in it, and turns each operation into a ready-to-send request. There are no
+Bikasend opens a repo of services, finds every Swagger and OpenAPI file in it (JSON or YAML),
+and turns each operation into a ready-to-send request. There are no
 collections to build, no accounts and no sync. It's like Postman or Bruno without the parts we
 don't use.
 
@@ -56,14 +56,15 @@ don't use.
 - **History, tabs, command palette (`⌘K`), cURL import.** Copy any request as cURL, PowerShell,
   HTTPie, JavaScript `fetch` or Python `requests`; secrets become environment variable references.
   `⌘ +` / `⌘ −` (`Ctrl` on Windows and Linux) change the text size.
-- **Updates you can trust.** The version sits at the bottom of the sidebar. When a new one is out,
+- **Updates you can trust.** The version sits in the top bar and lights up when a new one is out. Click it and
   Bikasend downloads it for your platform and checks its SHA-256 against both the update site and
   the GitHub release. It shows you both hashes and asks before it replaces the app and restarts.
 - **Secrets stay in memory.** Never written to disk, logs or the web view. Blocked from hosts an
   environment doesn't list unless you confirm the host, from plain http, and from redirects to
   another host or to plain http.
 - **No CORS.** Requests run natively from Go, not from a browser.
-- **Small.** About 10 MB, uses the system web view, works offline.
+- **Small.** About 10 MB, uses the system web view, works offline. The only call it makes on its
+  own is an update check, which you can turn off in Settings.
 
 ## Variables, environments and AWS
 
@@ -126,7 +127,8 @@ From v0.1.4 on, each file also has signed build provenance:
 | Linux, 64-bit | `Bikasend-<tag>-linux-amd64.zip` | `libgtk-3-0`, `libwebkit2gtk-4.1-0` |
 
 Builds are not signed yet. On macOS, open the app once, then go to **System Settings → Privacy &
-Security → Open Anyway**. On Windows, choose **More info → Run anyway**.
+Security → Open Anyway**. On Windows, choose **More info → Run anyway**. Updates you install from
+inside the app are checked against two SHA-256 hashes first (see above).
 
 ## Development
 

@@ -560,7 +560,9 @@ func TestUI(t *testing.T) {
 		t.Errorf("URL = %q, want {{baseUrl}}/items/{id}", url)
 	}
 	waitFor("the empty path param is marked apart from variables", `(() => { const m = [...document.querySelectorAll('.urlbar .hl mark')]; return m.length === 2 && m[0].className === 'ok' && m[1].className === 'param empty' && m[1].textContent === '{id}'; })()`)
-	waitFor("the version shows", `document.querySelector('#sideFoot .version').textContent === 'Bikasend dev'`)
+	waitFor("the version shows in the top bar", `document.querySelector('#versionBtn').textContent === 'dev' && !document.querySelector('#versionBtn').classList.contains('update')`)
+	must("check for updates", d.eval(`document.querySelector('#versionBtn').click()`, nil))
+	waitFor("a dev build says it does not check", `document.querySelector('#toast').textContent === 'This build does not check for updates.'`)
 
 	// Hover {id} in the URL and set it from its card.
 	var paramAt []float64
