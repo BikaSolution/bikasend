@@ -101,7 +101,31 @@ func TestValidateResponse(t *testing.T) {
 		})
 	}
 
-	chain := newDocs(fstest.MapFS{"o.json": {Data: []byte(allOfChain(30))}})
+	// Caps: a pattern over maxPattern and uniqueItems over maxUniqueItems are skipped, not checked.
+	long := newDocs(fstest.MapFS{"l.json": {Data: []byte(`{"openapi":"3.1.0","paths":{"/v":{"get":{"responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"type":"object","properties":{
+	  "code": {"type": "string", "pattern": "^` + strings.Repeat("b", maxPattern+1) + `"},
+	  "tags": {"type": "array", "uniqueItems": true}}}}}}}}}}}`)}})
+	_, lops, err := long.parse("l.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dups := "[" + strings.TrimSuffix(strings.Repeat(`"a",`, maxUniqueItems+1), ",") + "]"
+	if got := long.validateResponse(lops["l.json GET /v"], 200, "application/json", []byte(`{"code": "a", "tags": `+dups+`}`)); len(got) != 0 {
+		t.Errorf("patterns and uniqueItems past their caps must be skipped: %q", got)
+	}
+
+	// Big values cost one check per KB: a 5 MB string down a 2^30 allOf fan-out stops at the budget.
+	big := newDocs(fstest.MapFS{"o.json": {Data: []byte(allOfChain(30, `{"type":"string","minLength":1,"const":"x"}`))}})
+	_, bops, err := big.parse("o.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = big.validateResponse(bops["o.json GET /x"], 200, "application/json", []byte(`"`+strings.Repeat("y", 5<<20)+`"`))
+	if len(got) == 0 || !strings.HasPrefix(got[len(got)-1], "stopped after") || len(strings.Join(got, "")) > 20_000 {
+		t.Errorf("a big value must spend the check budget and keep issues short: %d issues, %d bytes", len(got), len(strings.Join(got, "")))
+	}
+
+	chain := newDocs(fstest.MapFS{"o.json": {Data: []byte(allOfChain(30, `{"type":"object"}`))}})
 	_, cops, err := chain.parse("o.json")
 	if err != nil {
 		t.Fatal(err)
@@ -132,12 +156,12 @@ const rulesSpec = `{"openapi": "3.1.0", "paths": {"/v": {"get": {"responses": {"
   }}}}}}}}}}`
 
 // allOfChain has n schemas where each is allOf two refs to the next: 2^n checks of one value.
-func allOfChain(n int) string {
+func allOfChain(n int, leaf string) string {
 	var defs []string
 	for i := range n {
 		next := fmt.Sprintf(`{"$ref":"#/components/schemas/A%d"}`, i+1)
 		defs = append(defs, fmt.Sprintf(`"A%d":{"allOf":[%s,%s]}`, i, next, next))
 	}
-	defs = append(defs, fmt.Sprintf(`"A%d":{"type":"object"}`, n))
+	defs = append(defs, fmt.Sprintf(`"A%d":%s`, n, leaf))
 	return `{"openapi":"3.0.0","paths":{"/x":{"get":{"responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"$ref":"#/components/schemas/A0"}}}}}}}},"components":{"schemas":{` + strings.Join(defs, ",") + `}}}`
 }

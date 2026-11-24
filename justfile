@@ -83,6 +83,7 @@ release version="":
     [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main differs from origin/main: pull or push first"; exit 1; }
     if git rev-parse -q --verify "refs/tags/$v" >/dev/null || [ -n "$(git ls-remote --tags origin "refs/tags/$v")" ]; then echo "$v already exists"; exit 1; fi
     [ "$(printf '%s\n%s\n' "$last" "$v" | sort -V | tail -1)" = "$v" ] || { echo "$v is not newer than $last"; exit 1; }
+    [ -s cmd/bikasend/release.pub ] || { echo "cmd/bikasend/release.pub is empty: run just keygen and commit it first, or this build can never update itself"; exit 1; }
     just --justfile "{{ justfile() }}" vet test
     file="{{ app_dir }}/wails.json"
     cur="$(sed -n 's/.*"productVersion": *"\([^"]*\)".*/\1/p' "$file")"

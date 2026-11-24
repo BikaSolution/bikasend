@@ -366,6 +366,10 @@ func TestInstallUpdate(t *testing.T) {
 			gh.web.sig = sign.Sign(gh.web.key, gh.web.sums)
 		}},
 		{name: "no release key in the build", deleted: true, spoil: func(s *Service, _ *fakeReleases) { s.opts.ReleaseKey = nil }},
+		{name: "a signed list over the size cap", deleted: true, spoil: func(_ *Service, gh *fakeReleases) {
+			gh.web.sums = append(gh.web.sums, bytes.Repeat([]byte(strings.Repeat("0", 64)+"  pad.zip\n"), maxSignedFile/70+1)...)
+			gh.web.sig = sign.Sign(gh.web.key, gh.web.sums)
+		}},
 		{name: "macOS outside a bundle", spoil: func(s *Service, _ *fakeReleases) { s.opts.GOOS, plat = "darwin", platformNames["darwin"] }},
 		{name: "no running app", spoil: func(s *Service, _ *fakeReleases) {
 			s.opts.Executable = func() (string, error) { return "", errors.New("unknown") }

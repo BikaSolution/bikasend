@@ -931,13 +931,16 @@ func (s *Service) SaveTabs(in bikasend.OpenTabs) error {
 	}
 	older := slices.DeleteFunc(s.readTabs(), func(f folderTabs) bool { return f.Root == s.rootPath })
 	data, err := json.Marshal(fitTabs(folderTabs{Root: s.rootPath, Tabs: cleanTabs(in)}, older))
+	if err == nil {
+		err = os.MkdirAll(s.opts.ConfigDir, 0o700)
+	}
+	if err == nil {
+		err = writeAtomic(filepath.Join(s.opts.ConfigDir, tabsFile), data)
+	}
 	if err != nil {
-		return err
+		return errors.Join(bikasend.ErrSaveTabs, err)
 	}
-	if err := os.MkdirAll(s.opts.ConfigDir, 0o700); err != nil {
-		return err
-	}
-	return writeAtomic(filepath.Join(s.opts.ConfigDir, tabsFile), data)
+	return nil
 }
 
 func (s *Service) readTabs() []folderTabs {

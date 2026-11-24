@@ -76,6 +76,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag must look like v1.2.3"; exit 1; }
+          [ -s release.pub ] || { echo "cmd/bikasend/release.pub is empty: a build without the release key can never update itself"; exit 1; }
           case "$SITE_URL" in ""|https://*) ;; *) echo "SITE_URL must be https"; exit 1 ;; esac
           wails build -clean -skipbindings -trimpath -platform "$PLATFORM" ${TAGS:+-tags "$TAGS"} \
             -ldflags "-X main.version=$TAG -X main.updateURL=$SITE_URL -X main.repo=$REPO"

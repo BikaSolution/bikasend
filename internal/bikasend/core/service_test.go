@@ -567,6 +567,15 @@ func TestTabs(t *testing.T) {
 	if old := NewService(Options{ConfigDir: s.opts.ConfigDir, AWS: func(string) AWS { return &fakeAWS{} }}); !old.Workspace().Settings.RestoreTabs {
 		t.Error("a settings.json without restoreTabs must keep the default, on")
 	}
+
+	blocked := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocked, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.opts.ConfigDir = filepath.Join(blocked, "Bikasend")
+	if err := s.SaveTabs(bikasend.OpenTabs{Tabs: []bikasend.SavedTab{{Title: "x"}}}); !errors.Is(err, bikasend.ErrSaveTabs) {
+		t.Errorf("a failed save must carry ErrSaveTabs: %v", err)
+	}
 }
 
 func TestTabLimits(t *testing.T) {

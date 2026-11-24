@@ -54,7 +54,7 @@ func newDocs(fsys fs.FS) *docs {
 	return &docs{fsys: fsys, cache: map[string]any{}, failed: map[string]error{}, scanLeft: maxScan, examplesLeft: maxExampleTotal}
 }
 
-// preloadWorkers decode spec files at once; every decoded tree stays in the cache anyway.
+// preloadWorkers caps parallel decodes: each one can hold a 20 MB spec in memory.
 const preloadWorkers = 4
 
 func (d *docs) load(name string) (any, error) {
@@ -793,7 +793,7 @@ func (d *docs) bodyHints(file string, schema any) []bikasend.BodyHint {
 	budget := min(maxExampleNodes, d.examplesLeft)
 	left := budget
 	d.hint(file, schema, "", nil, &left, map[string]int{}, &out)
-	d.examplesLeft -= budget - left
+	d.examplesLeft -= budget - max(left, 0)
 	return out
 }
 
@@ -821,8 +821,14 @@ func (d *docs) hint(file string, v any, at string, seen []string, left *int, ind
 		}
 	}
 
-	kind := schemaType(s)
 	props := obj(s["properties"])
+	enumList := list(s["enum"])
+	// Keys and enum values cost work too; a huge node spends the budget instead of being sorted.
+	*left -= (len(props) + len(enumList)) / 8
+	if *left <= 0 {
+		return
+	}
+	kind := schemaType(s)
 	switch {
 	case kind == "" && props != nil:
 		kind = "object"
@@ -830,7 +836,7 @@ func (d *docs) hint(file string, v any, at string, seen []string, left *int, ind
 		kind = "array"
 	}
 	var enum []string
-	for _, e := range list(s["enum"]) {
+	for _, e := range enumList[:min(len(enumList), maxHintItems)] {
 		if b, err := json.Marshal(e); err == nil && len(b) <= maxHintEnum {
 			enum = append(enum, string(b))
 		}
@@ -838,7 +844,8 @@ func (d *docs) hint(file string, v any, at string, seen []string, left *int, ind
 	if kind == "boolean" {
 		enum = append(enum, "true", "false")
 	}
-	if keys := sortedKeys(props); len(keys)+len(enum) > 0 {
+	keys := sortedKeys(props)
+	if len(keys)+len(enum) > 0 {
 		i, ok := index[at]
 		if !ok && len(*out) < maxHints {
 			i, ok = len(*out), true
@@ -859,7 +866,7 @@ func (d *docs) hint(file string, v any, at string, seen []string, left *int, ind
 			}
 		}
 	}
-	for _, name := range sortedKeys(props) {
+	for _, name := range keys {
 		child := name
 		if at != "" {
 			child = at + "." + name

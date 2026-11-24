@@ -22,4 +22,5 @@ var (
 	ErrAuth              = errors.New("bikasend: authentication")
 	ErrCurl              = errors.New("bikasend: invalid curl command")
 	ErrUpdate            = errors.New("bikasend: update check")
+	ErrSaveTabs          = errors.New("bikasend: save tabs")
 )

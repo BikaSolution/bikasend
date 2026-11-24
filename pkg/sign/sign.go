@@ -80,7 +80,10 @@ func NewKey(passphrase string) (ed25519.PublicKey, []byte, error) {
 // OpenKey decrypts a key file made by NewKey.
 func OpenKey(file []byte, passphrase string) (ed25519.PrivateKey, error) {
 	var kf keyFile
-	if err := json.Unmarshal(file, &kf); err != nil || kf.Version != 1 || kf.KDF != "pbkdf2-sha256" || kf.Iterations < 100_000 || kf.Iterations > 10_000_000 {
+	if err := json.Unmarshal(file, &kf); err != nil {
+		return nil, errors.Join(ErrFormat, err)
+	}
+	if kf.Version != 1 || kf.KDF != "pbkdf2-sha256" || kf.Iterations < 100_000 || kf.Iterations > 10_000_000 {
 		return nil, fmt.Errorf("%w: not a Bikasend key file", ErrFormat)
 	}
 	gcm, err := keyCipher(passphrase, kf.Salt, kf.Iterations)
@@ -120,7 +123,10 @@ func ParsePublicKey(text []byte) (ed25519.PublicKey, error) {
 		return nil, nil
 	}
 	b, err := base64.StdEncoding.DecodeString(s)
-	if err != nil || len(b) != ed25519.PublicKeySize {
+	if err != nil {
+		return nil, errors.Join(ErrFormat, err)
+	}
+	if len(b) != ed25519.PublicKeySize {
 		return nil, fmt.Errorf("%w: public key", ErrFormat)
 	}
 	return ed25519.PublicKey(b), nil
@@ -136,7 +142,10 @@ func Verify(pub ed25519.PublicKey, msg, sigFile []byte) error {
 		return fmt.Errorf("%w: no public key", ErrFormat)
 	}
 	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigFile)))
-	if err != nil || len(sig) != ed25519.SignatureSize {
+	if err != nil {
+		return errors.Join(ErrFormat, err)
+	}
+	if len(sig) != ed25519.SignatureSize {
 		return fmt.Errorf("%w: signature", ErrFormat)
 	}
 	if !ed25519.Verify(pub, msg, sig) {

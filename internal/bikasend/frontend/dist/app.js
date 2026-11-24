@@ -473,7 +473,6 @@ function closeTab(id) {
   renderResponse();
 }
 
-// ---------- Saved tabs ----------
 // The webview sends templates; Go masks secret-looking values before it writes tabs.json.
 
 let tabSaveTimer = 0;

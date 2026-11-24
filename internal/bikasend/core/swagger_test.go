@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -271,6 +272,25 @@ func TestBodyHints(t *testing.T) {
 	}
 	if got := newDocs(nil).bodyHints("x.json", map[string]any{"properties": wide}); len(got) != maxHints {
 		t.Errorf("hints past the cap: %d, want %d", len(got), maxHints)
+	}
+
+	enum := []any{strings.Repeat("x", maxHintEnum)}
+	for i := range maxHintItems + 10 {
+		enum = append(enum, i)
+	}
+	h := newDocs(nil).bodyHints("x.json", map[string]any{"type": "integer", "enum": enum})
+	if len(h) != 1 || len(h[0].Enum) != maxHintItems-1 || slices.ContainsFunc(h[0].Enum, func(e string) bool { return len(e) > maxHintEnum }) {
+		t.Errorf("enum hints must skip long values and stop at %d: %d", maxHintItems, len(h[0].Enum))
+	}
+
+	// A node with 100,000 keys spends the budget instead of being sorted on every visit.
+	huge := map[string]any{}
+	for i := range 100_000 {
+		huge[strconv.Itoa(i)] = true
+	}
+	d := newDocs(nil)
+	if got := d.bodyHints("x.json", map[string]any{"properties": huge}); len(got) != 0 || d.examplesLeft >= maxExampleTotal {
+		t.Errorf("a huge node must spend the budget and give no hints: %d hints, %d left", len(got), d.examplesLeft)
 	}
 }
 

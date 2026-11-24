@@ -119,8 +119,26 @@ func (d *docs) check(file string, schemaNode, value any, at string, seen []strin
 	if not, ok := s["not"]; ok && obj(not) != nil && matches(not) {
 		report("matches a schema it must not match")
 	}
-	if c, ok := s["const"]; ok && !sameJSON(c, value) {
-		report("value %v is not %v", value, c)
+	// Work that grows with the value's size costs one check per KB.
+	spend := func(n int) bool {
+		*left -= n >> 10
+		return *left > 0
+	}
+	// text is a value as compared and reported; objects and arrays are encoded and paid for.
+	text := func(v any) (string, bool) {
+		switch v.(type) {
+		case map[string]any, []any:
+			b, err := json.Marshal(v)
+			return string(b), err == nil && spend(len(b))
+		}
+		return fmt.Sprint(v), true
+	}
+	if c, ok := s["const"]; ok {
+		want, ok1 := text(c)
+		got, ok2 := text(value)
+		if ok1 && ok2 && got != want {
+			report("value %s is not %s", brief(got), brief(want))
+		}
 	}
 
 	if value == nil {
@@ -131,8 +149,11 @@ func (d *docs) check(file string, schemaNode, value any, at string, seen []strin
 		return
 	}
 
-	if enum := list(s["enum"]); len(enum) > 0 && !slices.ContainsFunc(enum, func(e any) bool { return fmt.Sprint(e) == fmt.Sprint(value) }) {
-		report("value %v is not one of %v", value, enum)
+	if enum := list(s["enum"]); len(enum) > 0 && spend(len(enum)) {
+		got, ok := text(value)
+		if ok && !slices.ContainsFunc(enum, func(e any) bool { t, _ := text(e); return t == got }) {
+			report("value %s is not one of %s", brief(got), brief(fmt.Sprint(enum[:min(len(enum), 20)])))
+		}
 	}
 
 	switch want := schemaType(s); want {
@@ -154,7 +175,7 @@ func (d *docs) check(file string, schemaNode, value any, at string, seen []strin
 			return
 		}
 		checkCount(s, "minItems", "maxItems", len(items), "items", report)
-		if s["uniqueItems"] == true && len(items) <= maxUniqueItems && !unique(items) {
+		if s["uniqueItems"] == true && len(items) <= maxUniqueItems && !unique(items, spend) {
 			report("has duplicate items")
 		}
 		for i, item := range items {
@@ -179,7 +200,9 @@ func (d *docs) check(file string, schemaNode, value any, at string, seen []strin
 			report("is %s, want string", kind(value))
 			return
 		}
-		d.checkString(s, str, report)
+		if spend(len(str)) {
+			d.checkString(s, str, report)
+		}
 	case "boolean":
 		if kind(value) != want {
 			report("is %s, want %s", kind(value), want)
@@ -291,18 +314,20 @@ func validFormat(format, v string) bool {
 	return true
 }
 
-// sameJSON compares two decoded JSON values; encoding/json sorts object keys.
-func sameJSON(a, b any) bool {
-	x, err1 := json.Marshal(a)
-	y, err2 := json.Marshal(b)
-	return err1 == nil && err2 == nil && string(x) == string(y)
+// brief keeps a value short enough for an issue line.
+func brief(s string) string {
+	if utf8.RuneCountInString(s) <= 60 {
+		return s
+	}
+	return quoteStart(s)
 }
 
-func unique(items []any) bool {
+// unique compares encoded items; encoding/json sorts object keys. Out of budget counts as unique.
+func unique(items []any, spend func(int) bool) bool {
 	seen := make(map[string]bool, len(items))
 	for _, it := range items {
 		b, err := json.Marshal(it)
-		if err != nil {
+		if err != nil || !spend(len(b)) {
 			return true
 		}
 		if seen[string(b)] {

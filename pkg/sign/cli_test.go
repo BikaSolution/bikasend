@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -27,7 +28,7 @@ func TestCLI(t *testing.T) {
 	if _, err := run(pass, "keygen", "-key", key, "-pub", pub); err != nil {
 		t.Fatal(err)
 	}
-	if fi, err := os.Stat(key); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(key); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
 		t.Errorf("key file mode: %v %v", fi, err)
 	}
 	if _, err := run(pass, "keygen", "-key", key+"2", "-pub", pub); err == nil {

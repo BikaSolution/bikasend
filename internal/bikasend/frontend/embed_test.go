@@ -446,6 +446,11 @@ func TestUI(t *testing.T) {
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Echo", "yes")
+		if n == 3 {
+			// Past MAX_DIFF_LINES in app.js once pretty-printed: one line per item.
+			_, _ = fmt.Fprintf(w, "[%s1]", strings.Repeat("1,", 3500))
+			return
+		}
 		_, _ = fmt.Fprintf(w, `[{"id": %d}]`, n)
 	}))
 	defer backend.Close()
@@ -648,6 +653,10 @@ func TestUI(t *testing.T) {
 		[...leaf.querySelectorAll('.row-tools button')].find((b) => b.textContent === 'Copy path').click();
 	})()`, nil))
 	waitFor("the path is copied", `window.copied === '$[0].id' && document.querySelector('#toast').textContent === 'Path copied'`)
+	must("send a third time", d.eval(`document.querySelector('#sendBtn').click()`, nil))
+	waitFor("the big response", `document.querySelector('#response .status') !== null && document.querySelectorAll('#response .tree .leaf').length > 3000`)
+	clickText("open the diff of a big body", "#response .subtabs", "Diff")
+	waitFor("a body past the line cap is not compared", `document.querySelector('#response .notice').textContent.startsWith('Not compared: a body has more than')`)
 
 	// JSON body: the editor colours keys and suggests the schema's keys, then its enum values.
 	must("open the operation with a body", d.eval(`[...document.querySelectorAll('button.op')].find((b) => b.querySelector('.path').textContent === '/orders').click()`, nil))
